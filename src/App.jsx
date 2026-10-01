@@ -55,6 +55,7 @@ function CloudAuth({onSession}){
   </div>
   <div className="comic-note">BUILD YOUR<br/><strong>OWN WORLD</strong></div>
  </div>
+}
 
 export default function App(){
  const [files,setFiles]=useState({});
