@@ -82,7 +82,7 @@ export default function App(){
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
  const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
- const filesHydrated=useRef(false),saveTimer=useRef(null);
+ const filesHydrated=useRef(false),saveTimer=useRef(null);\n const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
  const dirInput=useRef(null),localSocket=useRef(null);
  function classifyModelPricing(model){
   const p=model?.pricing;
@@ -160,7 +160,7 @@ export default function App(){
       <div className="folder"><Folder size={15}/><span>src</span></div>
       <FileItem name="App.js" active={active==="src/App.js"} onClick={()=>setActive("src/App.js")}/>
       <FileItem name="index.js" active={active==="src/index.js"} onClick={()=>setActive("src/index.js")}/>
-      <div className="side-bottom"><div><Cloud size={15}/> Autosave cloud</div><small>{saved?"Tersimpan di Supabase":"Perubahan belum disimpan"}</small></div>
+      <div className="side-bottom"><div><Cloud size={15}/> Autosave cloud</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
     </aside>
     <main className="editor-area">
       <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
