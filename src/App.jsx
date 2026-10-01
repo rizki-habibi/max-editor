@@ -79,7 +79,29 @@ export default function App(){
  const [saved,setSaved]=useState(true);
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
+ const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
  const dirInput=useRef(null),localSocket=useRef(null);
+ function classifyModelPricing(model){
+  const p=model?.pricing;
+  if(!p || typeof p!=="object") return "unknown";
+  const values=Object.values(p).filter(v=>typeof v==="number" || (typeof v==="string" && v.trim()!=="")).map(Number).filter(Number.isFinite);
+  if(!values.length) return "unknown";
+  return values.some(v=>v>0) ? "paid" : "free";
+ }
+ async function syncRouterModels(){
+  if(!routerConfig.apiKey){setRouterStats(x=>({...x,error:"API key Max Router belum diisi.",loading:false}));return []}
+  setRouterStats(x=>({...x,loading:true,error:""}));
+  try{
+   const models=await listRouterModels(routerConfig);
+   const counts=models.reduce((a,m)=>{a[classifyModelPricing(m)]++;return a},{free:0,paid:0,unknown:0});
+   setRouterStats({total:models.length,...counts,syncedAt:new Date().toLocaleTimeString("id-ID"),loading:false,error:""});
+   if(models.length && !models.some(m=>m.id===routerConfig.model)){
+    const preferred=models.find(m=>classifyModelPricing(m)==="free")||models[0];
+    setRouterConfig(x=>({...x,model:preferred.id}));
+   }
+   return models;
+  }catch(e){setRouterStats(x=>({...x,loading:false,error:e.message||"Gagal sinkron model."}));return []}
+ }
  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);
  useEffect(()=>{if(!session)return;(async()=>{let {data:w}=await supabase.from("editor_workspaces").select("*").eq("owner_id",session.user.id).order("created_at").limit(1).maybeSingle();if(!w){const r=await supabase.from("editor_workspaces").insert({owner_id:session.user.id,name:"MAX Workspace"}).select().single();w=r.data;if(w)await supabase.from("editor_files").insert(Object.entries(initialFiles).map(([path,content])=>({workspace_id:w.id,path,content,language:path.endsWith(".md")?"markdown":"javascript"})))}setWorkspace(w);if(w){const {data}=await supabase.from("editor_files").select("*").eq("workspace_id",w.id).order("path");setFiles(Object.fromEntries((data||[]).map(x=>[x.path,x.content])));}})()},[session]);
  const code=files[active]??"";
@@ -91,8 +113,9 @@ export default function App(){
  async function importFolder(){if(!window.showDirectoryPicker){dirInput.current?.click();return}try{const root=await window.showDirectoryPicker();const next={};async function walk(handle,path=""){for await(const [name,entry] of handle.entries()){if(name==="node_modules"||name===".git"||name==="dist"||name==="build")continue;const p=path?path+"/"+name:name;if(entry.kind==="file"){try{const file=await entry.getFile();if(file.size<2000000)next[p]=await file.text()}catch{}}else await walk(entry,p)}}await walk(root);setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}catch(e){if(e.name!=="AbortError")setLocalStatus("Gagal: "+e.message)}}
  async function importSelectedFiles(e){const next={};for(const file of [...e.target.files])if(file.size<2000000)next[file.webkitRelativePath||file.name]=await file.text();setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}
  async function sendAi(){const prompt=ai.trim();if(!prompt||aiBusy)return;setAi("");setAiBusy(true);const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];setAiMessages(msgs);try{const result=await chatWithRouter(routerConfig,msgs);setAiMessages(m=>[...m,{role:"assistant",content:result}])}catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}])}finally{setAiBusy(false)}}
- async function testRouter(){setRouterStatus("Memeriksa...");try{const models=await listRouterModels(routerConfig);setRouterStatus("Terhubung · "+models.length+" model")}catch(e){setRouterStatus(e.message)}}
+ async function testRouter(){setRouterStatus("Memeriksa...");const models=await syncRouterModels();if(models.length)setRouterStatus("Terhubung · "+models.length+" model");else setRouterStatus(routerStats.error||"Tidak ada model aktif.")}
  function saveRouterLocal(){saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus("Konfigurasi tersimpan")}
+ useEffect(()=>{if(!routerConfig.apiKey)return;syncRouterModels();const timer=setInterval(syncRouterModels,60000);return()=>clearInterval(timer)},[routerConfig.apiKey,routerConfig.baseUrl]);
  function connectLocal(){
   if(localSocket.current?.readyState===WebSocket.OPEN){setLocalStatus("Local Agent terhubung");return}
   try{
@@ -149,9 +172,15 @@ export default function App(){
      <p>Hubungkan editor ke API OpenAI-compatible Max Router.</p>
      <label>Base URL<input value={routerConfig.baseUrl} onChange={e=>setRouterConfig(x=>({...x,baseUrl:e.target.value}))}/></label>
      <label>API Key<input type="password" value={routerConfig.apiKey} onChange={e=>setRouterConfig(x=>({...x,apiKey:e.target.value}))} placeholder="Bearer key dari Max Router"/></label>
-     <label>Model<input value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value}))}/></label>
-     <div className="router-status-box">{routerStatus||"Belum dites."}</div>
-     <div><button onClick={testRouter}><RefreshCw size={13}/> Tes koneksi</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
+     <div className="router-model-stats">
+       <div><span>Total model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
+       <div><span>Gratis</span><strong className="free">{routerStats.loading?"…":routerStats.free}</strong></div>
+       <div><span>Berbayar</span><strong className="paid">{routerStats.loading?"…":routerStats.paid}</strong></div>
+       <div><span>Harga tidak diketahui</span><strong>{routerStats.loading?"…":routerStats.unknown}</strong></div>
+     </div>
+     <div className="router-sync-line">{routerStats.syncedAt?"Sinkron terakhir "+routerStats.syncedAt:"Belum disinkron"}{routerStats.error?" · "+routerStats.error:""}</div>
+     <div className="router-status-box">{routerStatus||"Daftar model akan disinkron otomatis dari Max Router."}</div>
+     <div><button onClick={syncRouterModels} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkron model</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
    </div></div>}
    {integrationsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setIntegrationsOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>Integrasi Developer</strong><button onClick={()=>setIntegrationsOpen(false)}><X size={18}/></button></div>
