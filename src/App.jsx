@@ -3,6 +3,7 @@ import Editor from "@monaco-editor/react";
 import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot} from "lucide-react";
 import {supabase} from "./lib/supabase";
 import {chatWithRouter,getRouterConfig,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
+import GitWorkspace from "./components/GitWorkspace";
 
 const initialFiles={
   "README.md": `# MAX Editor
@@ -142,7 +143,7 @@ export default function App(){
    <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">ONLINE</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><button title="Integrasi Git" onClick={()=>setIntegrationsOpen(true)}><GitBranch size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Developer" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
