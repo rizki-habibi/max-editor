@@ -144,5 +144,21 @@ export default function App(){
       <div className="provider">MAX Router · {routerConfig.model}</div>
     </aside>
    </div>
+   {routerOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setRouterOpen(false)}}><div className="router-modal">
+     <div className="router-modal-head"><strong>MAX Router</strong><button onClick={()=>setRouterOpen(false)}><X size={18}/></button></div>
+     <p>Hubungkan editor ke API OpenAI-compatible Max Router.</p>
+     <label>Base URL<input value={routerConfig.baseUrl} onChange={e=>setRouterConfig(x=>({...x,baseUrl:e.target.value}))}/></label>
+     <label>API Key<input type="password" value={routerConfig.apiKey} onChange={e=>setRouterConfig(x=>({...x,apiKey:e.target.value}))} placeholder="Bearer key dari Max Router"/></label>
+     <label>Model<input value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value}))}/></label>
+     <div className="router-status-box">{routerStatus||"Belum dites."}</div>
+     <div><button onClick={testRouter}><RefreshCw size={13}/> Tes koneksi</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
+   </div></div>}
+   {integrationsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setIntegrationsOpen(false)}}><div className="router-modal">
+     <div className="router-modal-head"><strong>Integrasi Developer</strong><button onClick={()=>setIntegrationsOpen(false)}><X size={18}/></button></div>
+     <div className="integration-row"><Github size={18}/><div><strong>GitHub</strong><small>Gunakan terminal lokal untuk clone, pull, commit, dan push tanpa menyimpan token di browser.</small></div></div>
+     <div className="integration-row"><GitBranch size={18}/><div><strong>GitLab</strong><small>Command GitLab juga dapat dijalankan melalui Local Agent.</small></div></div>
+     <div className="integration-row"><Terminal size={18}/><div><strong>Local Agent</strong><small>{localStatus}</small><button className="wide" onClick={connectLocal}>Hubungkan Local Agent</button></div></div>
+     <button className="wide" onClick={()=>{setIntegrationsOpen(false);setTerminal(true);connectLocal()}}>Buka Terminal</button>
+   </div></div>}
  </div>
 }
