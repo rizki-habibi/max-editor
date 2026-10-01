@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
 import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw} from "lucide-react";
 import {supabase} from "./lib/supabase";
@@ -79,7 +79,7 @@ export default function App(){
  const [saved,setSaved]=useState(true);
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
- const dirInput=useRef(null);
+ const dirInput=useRef(null),localSocket=useRef(null);
  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);
  useEffect(()=>{if(!session)return;(async()=>{let {data:w}=await supabase.from("editor_workspaces").select("*").eq("owner_id",session.user.id).order("created_at").limit(1).maybeSingle();if(!w){const r=await supabase.from("editor_workspaces").insert({owner_id:session.user.id,name:"MAX Workspace"}).select().single();w=r.data;if(w)await supabase.from("editor_files").insert(Object.entries(initialFiles).map(([path,content])=>({workspace_id:w.id,path,content,language:path.endsWith(".md")?"markdown":"javascript"})))}setWorkspace(w);if(w){const {data}=await supabase.from("editor_files").select("*").eq("workspace_id",w.id).order("path");setFiles(Object.fromEntries((data||[]).map(x=>[x.path,x.content])));}})()},[session]);
  const code=files[active]??"";
@@ -93,11 +93,30 @@ export default function App(){
  async function sendAi(){const prompt=ai.trim();if(!prompt||aiBusy)return;setAi("");setAiBusy(true);const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];setAiMessages(msgs);try{const result=await chatWithRouter(routerConfig,msgs);setAiMessages(m=>[...m,{role:"assistant",content:result}])}catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}])}finally{setAiBusy(false)}}
  async function testRouter(){setRouterStatus("Memeriksa...");try{const models=await listRouterModels(routerConfig);setRouterStatus("Terhubung · "+models.length+" model")}catch(e){setRouterStatus(e.message)}}
  function saveRouterLocal(){saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus("Konfigurasi tersimpan")}
- function connectLocal(){try{const ws=new WebSocket("ws://127.0.0.1:8765");ws.onopen=()=>{setLocalStatus("Local Agent terhubung");ws.close()};ws.onerror=()=>setLocalStatus("Local Agent tidak ditemukan")}catch(e){setLocalStatus(e.message)}}
- function runTerminal(){const command=terminalInput.trim();if(!command)return;setTerminalLines(x=>[...x,"PS MAX> "+command,"Local Agent diperlukan untuk menjalankan command Windows."]);setTerminalInput("")}
+ function connectLocal(){
+  if(localSocket.current?.readyState===WebSocket.OPEN){setLocalStatus("Local Agent terhubung");return}
+  try{
+    const ws=new WebSocket("ws://127.0.0.1:8765");
+    localSocket.current=ws;
+    ws.onopen=()=>setLocalStatus("Local Agent terhubung");
+    ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==="ready")setLocalStatus(m.message);if(m.type==="result"){setTerminalLines(x=>[...x,...(m.stdout?[m.stdout]:[]),...(m.stderr?["ERROR: "+m.stderr]:[]),"Exit code: "+m.code])}}catch{}};
+    ws.onerror=()=>setLocalStatus("Local Agent tidak ditemukan");
+    ws.onclose=()=>{localSocket.current=null;setLocalStatus("Local Agent terputus")};
+  }catch(e){setLocalStatus(e.message)}
+ }
+ function runTerminal(){
+  const command=terminalInput.trim();if(!command)return;
+  const blocked=/\b(format|del\s+\/s|rd\s+\/s|rmdir\s+\/s|remove-item\s+-recurse|git\s+reset\s+--hard|git\s+clean\s+-fd|rm\s+-rf)\b/i;
+  setTerminalLines(x=>[...x,"PS MAX> "+command]);
+  setTerminalInput("");
+  if(blocked.test(command)){setTerminalLines(x=>[...x,"Command diblokir karena berpotensi menghapus data."]);return}
+  if(!localSocket.current||localSocket.current.readyState!==WebSocket.OPEN){setTerminalLines(x=>[...x,"Local Agent belum terhubung. Klik Integrasi → Local Agent → Hubungkan."]);return}
+  localSocket.current.send(JSON.stringify({type:"exec",command}));
+ }
  if(!supabase)return <div className="auth-screen"><div className="auth-card"><h1>MAX Editor</h1><p>Supabase belum dikonfigurasi.</p></div></div>;
  if(!session)return <CloudAuth onSession={setSession}/>;
  return <div className="app">
+   <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">ONLINE</span></div>
     <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><button title="Integrasi Git" onClick={()=>setIntegrationsOpen(true)}><GitBranch size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
@@ -115,7 +134,7 @@ export default function App(){
     <main className="editor-area">
       <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
       <div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor)=>editor.focus()} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection"}}/></div>
-      {terminal&&<div className="terminal"><div className="terminal-head"><span><Terminal size={14}/> TERMINAL</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-body"><span className="prompt">max-editor</span> $ echo "Workspace online"</div></div>}
+      {terminal&&<div className="terminal"><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-body">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}<div><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="ketik command Windows..." autoFocus/></div></div></div>}
       <div className="statusbar"><span>Ln 1, Col 1</span><span>{language}</span><span>UTF-8</span><button onClick={()=>setTerminal(!terminal)}><Terminal size={13}/> Terminal</button></div>
     </main>
     <aside className="ai-panel">
