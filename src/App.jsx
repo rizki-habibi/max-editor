@@ -30,8 +30,19 @@ function FileItem({name,active,onClick,folder=false}) {
 
 function CloudAuth({onSession}){
  const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[signup,setSignup]=useState(false),[msg,setMsg]=useState(""),[loading,setLoading]=useState("");
+ useEffect(()=>{
+  const params=new URLSearchParams(window.location.search);
+  const authError=params.get("error_description")||params.get("error");
+  if(authError){setMsg(decodeURIComponent(authError.replace(/\\+/g," ")));window.history.replaceState({},document.title,window.location.pathname);}
+ },[]);
  async function go(e){e.preventDefault();setMsg("");setLoading("email");const r=signup?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});setLoading("");if(r.error)setMsg(r.error.message);else if(r.data.session)onSession(r.data.session);else setMsg("Akun dibuat. Cek email untuk konfirmasi jika diminta.");}
- async function oauth(provider){setMsg("");setLoading(provider);const {error}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo:window.location.origin}});if(error){setLoading("");setMsg(error.message);}}
+ async function oauth(provider){
+  setMsg("");setLoading(provider);
+  const redirectTo=window.location.origin+"/";
+  const {data,error}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo}});
+  if(error){setLoading("");setMsg(error.message);return;}
+  if(!data?.url){setLoading("");setMsg("Supabase tidak memberikan URL login OAuth.");}
+ }
  return <div className="auth-screen">
   <div className="comic-orbit orbit-a"></div><div className="comic-orbit orbit-b"></div><div className="auth-spark spark-a">✦</div><div className="auth-spark spark-b">★</div>
   <div className="auth-wrap">
