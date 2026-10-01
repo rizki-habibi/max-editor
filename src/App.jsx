@@ -1,30 +1,54 @@
 import {useEffect,useMemo,useState} from "react";
 import Editor from "@monaco-editor/react";
-import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut} from "lucide-react";\nimport {supabase} from "./lib/supabase";
+import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut} from "lucide-react";
+import {supabase} from "./lib/supabase";
 
 const initialFiles={
-  "README.md":"# MAX Editor\n\nEditor coding online berbasis browser.\n\n- Monaco Editor\n- Workspace cloud siap Supabase\n- AI panel siap Max Router\n- GitHub integration siap dikembangkan\n",
-  "src/App.js":"export default function hello() {\n  console.log('Hello from MAX Editor');\n}\n",
-  "src/index.js":"import hello from './App.js';\n\nhello();\n"
+  "README.md":"# MAX Editor
+
+Editor coding online berbasis browser.
+
+- Monaco Editor
+- Workspace cloud siap Supabase
+- AI panel siap Max Router
+- GitHub integration siap dikembangkan
+",
+  "src/App.js":"export default function hello() {
+  console.log('Hello from MAX Editor');
+}
+",
+  "src/index.js":"import hello from './App.js';
+
+hello();
+"
 };
 
 function FileItem({name,active,onClick,folder=false}) {
   return <button className={`file-item ${active?'active':''}`} onClick={onClick}>{folder?<Folder size={15}/>:<FileCode2 size={15}/>}<span>{name}</span></button>
 }
 
-\nfunction CloudAuth({onSession}){const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[signup,setSignup]=useState(false),[msg,setMsg]=useState("");async function go(e){e.preventDefault();setMsg("");const r=signup?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});if(r.error)setMsg(r.error.message);else if(r.data.session)onSession(r.data.session);else setMsg("Akun dibuat. Konfirmasi email jika diminta.");}return <div className="auth-screen"><form className="auth-card" onSubmit={go}><div className="brand-mark">M</div><h1>MAX Editor</h1><p>Masuk untuk workspace coding cloud.</p><input type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/><input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} minLength="6" required/>{msg&&<small>{msg}</small>}<button className="auth-submit"><LogIn size={15}/>{signup?"Buat akun":"Masuk"}</button><button type="button" className="switch-auth" onClick={()=>setSignup(!signup)}>{signup?"Sudah punya akun? Masuk":"Belum punya akun? Buat akun"}</button></form></div>}\n\nexport default function App(){
- const [files,setFiles]=useState({});\n const [session,setSession]=useState(null);\n const [workspace,setWorkspace]=useState(null);
+
+function CloudAuth({onSession}){const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[signup,setSignup]=useState(false),[msg,setMsg]=useState("");async function go(e){e.preventDefault();setMsg("");const r=signup?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});if(r.error)setMsg(r.error.message);else if(r.data.session)onSession(r.data.session);else setMsg("Akun dibuat. Konfirmasi email jika diminta.");}return <div className="auth-screen"><form className="auth-card" onSubmit={go}><div className="brand-mark">M</div><h1>MAX Editor</h1><p>Masuk untuk workspace coding cloud.</p><input type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/><input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} minLength="6" required/>{msg&&<small>{msg}</small>}<button className="auth-submit"><LogIn size={15}/>{signup?"Buat akun":"Masuk"}</button><button type="button" className="switch-auth" onClick={()=>setSignup(!signup)}>{signup?"Sudah punya akun? Masuk":"Belum punya akun? Buat akun"}</button></form></div>}
+
+export default function App(){
+ const [files,setFiles]=useState({});
+ const [session,setSession]=useState(null);
+ const [workspace,setWorkspace]=useState(null);
  const [active,setActive]=useState("README.md");
  const [ai,setAi]=useState("");
  const [terminal,setTerminal]=useState(false);
- const [saved,setSaved]=useState(true);\n useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);\n useEffect(()=>{if(!session)return;(async()=>{let {data:w}=await supabase.from("editor_workspaces").select("*").eq("owner_id",session.user.id).order("created_at").limit(1).maybeSingle();if(!w){const r=await supabase.from("editor_workspaces").insert({owner_id:session.user.id,name:"MAX Workspace"}).select().single();w=r.data;if(w)await supabase.from("editor_files").insert(Object.entries(initialFiles).map(([path,content])=>({workspace_id:w.id,path,content,language:path.endsWith(".md")?"markdown":"javascript"})))}setWorkspace(w);if(w){const {data}=await supabase.from("editor_files").select("*").eq("workspace_id",w.id).order("path");setFiles(Object.fromEntries((data||[]).map(x=>[x.path,x.content])));}})()},[session]);
+ const [saved,setSaved]=useState(true);
+ useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);
+ useEffect(()=>{if(!session)return;(async()=>{let {data:w}=await supabase.from("editor_workspaces").select("*").eq("owner_id",session.user.id).order("created_at").limit(1).maybeSingle();if(!w){const r=await supabase.from("editor_workspaces").insert({owner_id:session.user.id,name:"MAX Workspace"}).select().single();w=r.data;if(w)await supabase.from("editor_files").insert(Object.entries(initialFiles).map(([path,content])=>({workspace_id:w.id,path,content,language:path.endsWith(".md")?"markdown":"javascript"})))}setWorkspace(w);if(w){const {data}=await supabase.from("editor_files").select("*").eq("workspace_id",w.id).order("path");setFiles(Object.fromEntries((data||[]).map(x=>[x.path,x.content])));}})()},[session]);
  const code=files[active]??"";
  const language=useMemo(()=>active.endsWith(".md")?"markdown":active.endsWith(".json")?"json":active.endsWith(".css")?"css":active.endsWith(".html")?"html":"javascript",[active]);
 
  function updateCode(value){setFiles(f=>({...f,[active]:value??""}));setSaved(false)}
  async function save(){if(!workspace)return setSaved(true);const r=await supabase.from("editor_files").upsert({workspace_id:workspace.id,path:active,content:files[active]??"",language},{onConflict:"workspace_id,path"});if(r.error)alert(r.error.message);else setSaved(true)}
  function createFile(){const n=prompt("Nama file baru");if(!n)return;setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
- if(!supabase)return <div className="auth-screen"><div className="auth-card"><h1>MAX Editor</h1><p>Supabase belum dikonfigurasi.</p></div></div>;\n if(!session)return <CloudAuth onSession={setSession}/>;\n return <div className="app">
+ if(!supabase)return <div className="auth-screen"><div className="auth-card"><h1>MAX Editor</h1><p>Supabase belum dikonfigurasi.</p></div></div>;
+ if(!session)return <CloudAuth onSession={setSession}/>;
+ return <div className="app">
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">ONLINE</span></div>
     <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Simpan" onClick={save}><Save size={16}/></button><button title="Runway" onClick={()=>runway().catch(e=>alert(e.message))}>Runway</button><button><GitBranch size={16}/> main</button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button><button><Settings size={16}/></button></div>
