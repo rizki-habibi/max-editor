@@ -27,7 +27,7 @@ function FileItem({name,active,onClick,folder=false}) {
  if(!supabase)return <div className="auth-screen"><div className="auth-card"><h1>MAX Editor</h1><p>Supabase belum dikonfigurasi.</p></div></div>;\n if(!session)return <CloudAuth onSession={setSession}/>;\n return <div className="app">
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">ONLINE</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Simpan" onClick={save}><Save size={16}/></button><button><GitBranch size={16}/> main</button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button><button><Settings size={16}/></button></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Simpan" onClick={save}><Save size={16}/></button><button title="Runway" onClick={()=>runway().catch(e=>alert(e.message))}>Runway</button><button><GitBranch size={16}/> main</button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button><button><Settings size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
