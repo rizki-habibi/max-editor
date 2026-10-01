@@ -1,0 +1,40 @@
+name: MAX Editor Error Detection
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detect-errors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check application and local agent
+        run: npm run check
+
+      - name: Verify required files
+        shell: bash
+        run: |
+          test -f src/App.jsx
+          test -f src/lib/maxRouter.js
+          test -f src/lib/supabase.js
+          test -f local-agent/server.js
+          test -f .github/workflows/ci.yml
