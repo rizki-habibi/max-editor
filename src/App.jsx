@@ -4,7 +4,7 @@ import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal
 import {supabase} from "./lib/supabase";
 
 const initialFiles={
-  "README.md":"# MAX Editor
+  "README.md": `# MAX Editor
 
 Editor coding online berbasis browser.
 
@@ -12,15 +12,15 @@ Editor coding online berbasis browser.
 - Workspace cloud siap Supabase
 - AI panel siap Max Router
 - GitHub integration siap dikembangkan
-",
-  "src/App.js":"export default function hello() {
+`,
+  "src/App.js": `export default function hello() {
   console.log('Hello from MAX Editor');
 }
-",
-  "src/index.js":"import hello from './App.js';
+`,
+  "src/index.js": `import hello from './App.js';
 
 hello();
-"
+`
 };
 
 function FileItem({name,active,onClick,folder=false}) {
