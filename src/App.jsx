@@ -1,7 +1,8 @@
 import {useEffect,useMemo,useState} from "react";
 import Editor from "@monaco-editor/react";
-import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github} from "lucide-react";
+import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw} from "lucide-react";
 import {supabase} from "./lib/supabase";
+import {chatWithRouter,getRouterConfig,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 
 const initialFiles={
   "README.md": `# MAX Editor
@@ -76,6 +77,9 @@ export default function App(){
  const [ai,setAi]=useState("");
  const [terminal,setTerminal]=useState(false);
  const [saved,setSaved]=useState(true);
+ const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
+ const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
+ const dirInput=useRef(null);
  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);
  useEffect(()=>{if(!session)return;(async()=>{let {data:w}=await supabase.from("editor_workspaces").select("*").eq("owner_id",session.user.id).order("created_at").limit(1).maybeSingle();if(!w){const r=await supabase.from("editor_workspaces").insert({owner_id:session.user.id,name:"MAX Workspace"}).select().single();w=r.data;if(w)await supabase.from("editor_files").insert(Object.entries(initialFiles).map(([path,content])=>({workspace_id:w.id,path,content,language:path.endsWith(".md")?"markdown":"javascript"})))}setWorkspace(w);if(w){const {data}=await supabase.from("editor_files").select("*").eq("workspace_id",w.id).order("path");setFiles(Object.fromEntries((data||[]).map(x=>[x.path,x.content])));}})()},[session]);
  const code=files[active]??"";
@@ -84,18 +88,25 @@ export default function App(){
  function updateCode(value){setFiles(f=>({...f,[active]:value??""}));setSaved(false)}
  async function save(){if(!workspace)return setSaved(true);const r=await supabase.from("editor_files").upsert({workspace_id:workspace.id,path:active,content:files[active]??"",language},{onConflict:"workspace_id,path"});if(r.error)alert(r.error.message);else setSaved(true)}
  function createFile(){const n=prompt("Nama file baru");if(!n)return;setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
+ async function importFolder(){if(!window.showDirectoryPicker){dirInput.current?.click();return}try{const root=await window.showDirectoryPicker();const next={};async function walk(handle,path=""){for await(const [name,entry] of handle.entries()){const p=path?path+"/"+name:name;if(entry.kind==="file"){if(/(^|\\/)(node_modules|\\.git|dist|build)(\\/|$)/.test(p))continue;try{const file=await entry.getFile();if(file.size<2000000)next[p]=await file.text()}catch{}}else await walk(entry,p)}}await walk(root);setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}catch(e){if(e.name!=="AbortError")setLocalStatus("Gagal: "+e.message)}}
+ async function importSelectedFiles(e){const next={};for(const file of [...e.target.files])if(file.size<2000000)next[file.webkitRelativePath||file.name]=await file.text();setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}
+ async function sendAi(){const prompt=ai.trim();if(!prompt||aiBusy)return;setAi("");setAiBusy(true);const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];setAiMessages(msgs);try{const result=await chatWithRouter(routerConfig,msgs);setAiMessages(m=>[...m,{role:"assistant",content:result}])}catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}])}finally{setAiBusy(false)}}
+ async function testRouter(){setRouterStatus("Memeriksa...");try{const models=await listRouterModels(routerConfig);setRouterStatus("Terhubung · "+models.length+" model")}catch(e){setRouterStatus(e.message)}}
+ function saveRouterLocal(){saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus("Konfigurasi tersimpan")}
+ function connectLocal(){try{const ws=new WebSocket("ws://127.0.0.1:8765");ws.onopen=()=>{setLocalStatus("Local Agent terhubung");ws.close()};ws.onerror=()=>setLocalStatus("Local Agent tidak ditemukan")}catch(e){setLocalStatus(e.message)}}
+ function runTerminal(){const command=terminalInput.trim();if(!command)return;setTerminalLines(x=>[...x,"PS MAX> "+command,"Local Agent diperlukan untuk menjalankan command Windows."]);setTerminalInput("")}
  if(!supabase)return <div className="auth-screen"><div className="auth-card"><h1>MAX Editor</h1><p>Supabase belum dikonfigurasi.</p></div></div>;
  if(!session)return <CloudAuth onSession={setSession}/>;
  return <div className="app">
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">ONLINE</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Simpan" onClick={save}><Save size={16}/></button><button title="Runway" onClick={()=>runway().catch(e=>alert(e.message))}>Runway</button><button><GitBranch size={16}/> main</button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button><button><Settings size={16}/></button></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><button title="Integrasi Git" onClick={()=>setIntegrationsOpen(true)}><GitBranch size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
-      <div className="side-head"><span>EXPLORER</span><button onClick={createFile}><Plus size={15}/></button></div>
+      <div className="side-head"><span>EXPLORER</span><div><button onClick={importFolder}><FolderInput size={14}/></button><button onClick={createFile}><Plus size={15}/></button></div></div>
       <div className="project"><FolderOpen size={15}/><strong>{workspace?.name||"MAX Workspace"}</strong><ChevronDown size={14}/></div>
-      <FileItem name="README.md" active={active==="README.md"} onClick={()=>setActive("README.md")}/>
+      {Object.keys(files).sort().map(name=><FileItem key={name} name={name} active={active===name} onClick={()=>setActive(name)}/>)}
       <div className="folder"><Folder size={15}/><span>src</span></div>
       <FileItem name="App.js" active={active==="src/App.js"} onClick={()=>setActive("src/App.js")}/>
       <FileItem name="index.js" active={active==="src/index.js"} onClick={()=>setActive("src/index.js")}/>
@@ -109,9 +120,9 @@ export default function App(){
     </main>
     <aside className="ai-panel">
       <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><span>Router</span></div>
-      <div className="ai-body"><div className="ai-empty"><div className="ai-icon">M</div><h3>AI Coding Assistant</h3><p>Tanyakan kode, minta perbaikan, atau minta AI membuat perubahan pada workspace.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>setAi("Optimalkan kode ini")}>Optimalkan</button></div></div></div>
-      <div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} placeholder="Tanya MAX AI..."/><button><Play size={15}/></button></div>
-      <div className="provider">MAX Router · AI gateway</div>
+      <div className="ai-body">{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>AI Coding Assistant</h3><p>Analisis file, cari bug, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>setAi("Optimalkan kode ini")}>Optimalkan</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div></div>)}</div>}</div>
+      <div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanya MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
+      <div className="provider">MAX Router · {routerConfig.model}</div>
     </aside>
    </div>
  </div>
