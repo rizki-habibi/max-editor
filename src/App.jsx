@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from "react";
 import Editor from "@monaco-editor/react";
-import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut} from "lucide-react";
+import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github} from "lucide-react";
 import {supabase} from "./lib/supabase";
 
 const initialFiles={
@@ -28,7 +28,33 @@ function FileItem({name,active,onClick,folder=false}) {
 }
 
 
-function CloudAuth({onSession}){const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[signup,setSignup]=useState(false),[msg,setMsg]=useState("");async function go(e){e.preventDefault();setMsg("");const r=signup?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});if(r.error)setMsg(r.error.message);else if(r.data.session)onSession(r.data.session);else setMsg("Akun dibuat. Konfirmasi email jika diminta.");}return <div className="auth-screen"><div className="comic-orbit orbit-a"></div><div className="comic-orbit orbit-b"></div><div className="auth-spark spark-a">✦</div><div className="auth-spark spark-b">★</div><div className="auth-wrap"><section className="auth-hero"><div className="hero-kicker">MAX UNIVERSE <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HEY, CODER!</strong><span>Workspace-mu siap meluncur ke cloud.</span></div><div className="hero-title">CODE.<br/><em>CREATE.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · Supabase Cloud · MAX AI</div><div className="hero-lines"></div></section><form className="auth-card" onSubmit={go}><div className="auth-card-top"><span className="panel-tag">CLOUD ACCESS</span><span className="panel-dots">● ● ●</span></div><div className="auth-card-icon"><LogIn size={20}/></div><h1>{signup?"Buat akun":"Masuk ke MAX Editor"}</h1><p>{signup?"Buat identitas coder dan mulai workspace cloud.":"Lanjutkan coding dari workspace cloud-mu."}</p><label>Email<input type="email" placeholder="nama@email.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required/></label><label>Password<input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} minLength="6" autoComplete={signup?"new-password":"current-password"} required/></label>{msg&&<div className="auth-message">{msg}</div>}<button className="auth-submit" type="submit"><LogIn size={17}/>{signup?"Buat akun":"Masuk"}<span>→</span></button><div className="auth-divider"><span>atau</span></div><button type="button" className="switch-auth" onClick={()=>{setSignup(!signup);setMsg("")}}>{signup?"Sudah punya akun? Masuk":"Belum punya akun? Buat akun"}</button><div className="auth-foot"><span>● Cloud workspace</span><span>● Secure auth</span></div></form></div><div className="comic-note">BUILD YOUR<br/><strong>OWN WORLD</strong></div></div>}
+function CloudAuth({onSession}){
+ const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[signup,setSignup]=useState(false),[msg,setMsg]=useState(""),[loading,setLoading]=useState("");
+ async function go(e){e.preventDefault();setMsg("");setLoading("email");const r=signup?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});setLoading("");if(r.error)setMsg(r.error.message);else if(r.data.session)onSession(r.data.session);else setMsg("Akun dibuat. Cek email untuk konfirmasi jika diminta.");}
+ async function oauth(provider){setMsg("");setLoading(provider);const {error}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo:window.location.origin}});if(error){setLoading("");setMsg(error.message);}}
+ return <div className="auth-screen">
+  <div className="comic-orbit orbit-a"></div><div className="comic-orbit orbit-b"></div><div className="auth-spark spark-a">✦</div><div className="auth-spark spark-b">★</div>
+  <div className="auth-wrap">
+   <section className="auth-hero"><div className="hero-kicker">MAX UNIVERSE <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HEY, CODER!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">CODE.<br/><em>CREATE.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · Supabase Cloud · MAX AI</div><div className="hero-lines"></div></section>
+   <form className="auth-card" onSubmit={go}>
+    <div className="auth-card-top"><span className="panel-tag">CLOUD ACCESS</span><span className="panel-dots">● ● ●</span></div>
+    <div className="auth-card-icon"><LogIn size={20}/></div>
+    <h1>{signup?"Buat akun":"Masuk ke MAX Editor"}</h1><p>{signup?"Gunakan akun Google atau GitHub agar akses workspace mudah dipulihkan.":"Pilih akun yang biasa kamu gunakan untuk coding."}</p>
+    <div className="oauth-grid">
+      <button type="button" className="oauth-button github" onClick={()=>oauth("github")} disabled={!!loading}><Github size={18}/><span>{loading==="github"?"Menghubungkan...":"GitHub"}</span></button>
+      <button type="button" className="oauth-button google" onClick={()=>oauth("google")} disabled={!!loading}><span className="google-g">G</span><span>{loading==="google"?"Menghubungkan...":"Google"}</span></button>
+    </div>
+    <div className="auth-divider"><span>atau email</span></div>
+    <label>Email<input type="email" placeholder="nama@email.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required/></label>
+    <label>Password<input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} minLength="6" autoComplete={signup?"new-password":"current-password"} required/></label>
+    {msg&&<div className="auth-message">{msg}</div>}
+    <button className="auth-submit" type="submit" disabled={!!loading}><LogIn size={17}/>{loading==="email"?"Memproses...":signup?"Buat akun":"Masuk"}<span>→</span></button>
+    <button type="button" className="switch-auth" onClick={()=>{setSignup(!signup);setMsg("")}}>{signup?"Sudah punya akun? Masuk":"Belum punya akun? Buat akun dengan email"}</button>
+    <div className="auth-foot"><span>● Cloud workspace</span><span>● Akun tersimpan</span></div>
+   </form>
+  </div>
+  <div className="comic-note">BUILD YOUR<br/><strong>OWN WORLD</strong></div>
+ </div>
 
 export default function App(){
  const [files,setFiles]=useState({});
