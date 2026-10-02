@@ -82,7 +82,8 @@ export default function App(){
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
  const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
- const filesHydrated=useRef(false),saveTimer=useRef(null);\n const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
+ const filesHydrated=useRef(false),saveTimer=useRef(null);
+ const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
  const dirInput=useRef(null),localSocket=useRef(null);
  function classifyModelPricing(model){
   const p=model?.pricing;
