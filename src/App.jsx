@@ -48,9 +48,9 @@ function CloudAuth({onSession}){
  return <div className="auth-screen">
   <div className="comic-orbit orbit-a"></div><div className="comic-orbit orbit-b"></div><div className="auth-spark spark-a">✦</div><div className="auth-spark spark-b">★</div>
   <div className="auth-wrap">
-   <section className="auth-hero"><div className="hero-kicker">MAX UNIVERSE <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HEY, CODER!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">CODE.<br/><em>CREATE.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · Supabase Cloud · MAX AI</div><div className="hero-lines"></div></section>
+   <section className="auth-hero"><div className="hero-kicker">DUNIA MAX <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HAI, PEMBUAT KODE!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">KODE.<br/><em>BUAT.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · Supabase Cloud · MAX AI</div><div className="hero-lines"></div></section>
    <form className="auth-card" onSubmit={go}>
-    <div className="auth-card-top"><span className="panel-tag">CLOUD ACCESS</span><span className="panel-dots">● ● ●</span></div>
+    <div className="auth-card-top"><span className="panel-tag">AKSES CLOUD</span><span className="panel-dots">● ● ●</span></div>
     <div className="auth-card-icon"><LogIn size={20}/></div>
     <h1>{signup?"Buat akun":"Masuk ke MAX Editor"}</h1><p>{signup?"Gunakan akun Google atau GitHub agar akses workspace mudah dipulihkan.":"Pilih akun yang biasa kamu gunakan untuk coding."}</p>
     <div className="oauth-grid">
@@ -63,10 +63,10 @@ function CloudAuth({onSession}){
     {msg&&<div className="auth-message">{msg}</div>}
     <button className="auth-submit" type="submit" disabled={!!loading}><LogIn size={17}/>{loading==="email"?"Memproses...":signup?"Buat akun":"Masuk"}<span>→</span></button>
     <button type="button" className="switch-auth" onClick={()=>{setSignup(!signup);setMsg("")}}>{signup?"Sudah punya akun? Masuk":"Belum punya akun? Buat akun dengan email"}</button>
-    <div className="auth-foot"><span>● Cloud workspace</span><span>● Akun tersimpan</span></div>
+    <div className="auth-foot"><span>● Ruang kerja cloud</span><span>● Akun tersimpan</span></div>
    </form>
   </div>
-  <div className="comic-note">BUILD YOUR<br/><strong>OWN WORLD</strong></div>
+  <div className="comic-note">BANGUN<br/><strong>DUNIAMU</strong></div>
  </div>
 }
 
@@ -149,18 +149,18 @@ export default function App(){
  return <div className="app">
    <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
-    <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">ONLINE</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Developer" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
+    <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">AKTIF</span></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
-      <div className="side-head"><span>EXPLORER</span><div><button onClick={importFolder}><FolderInput size={14}/></button><button onClick={createFile}><Plus size={15}/></button></div></div>
+      <div className="side-head"><span>PENJELAJAH</span><div><button onClick={importFolder}><FolderInput size={14}/></button><button onClick={createFile}><Plus size={15}/></button></div></div>
       <div className="project"><FolderOpen size={15}/><strong>{workspace?.name||"MAX Workspace"}</strong><ChevronDown size={14}/></div>
       {Object.keys(files).sort().map(name=><FileItem key={name} name={name} active={active===name} onClick={()=>setActive(name)}/>)}
       <div className="folder"><Folder size={15}/><span>src</span></div>
       <FileItem name="App.js" active={active==="src/App.js"} onClick={()=>setActive("src/App.js")}/>
       <FileItem name="index.js" active={active==="src/index.js"} onClick={()=>setActive("src/index.js")}/>
-      <div className="side-bottom"><div><Cloud size={15}/> Autosave cloud</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
+      <div className="side-bottom"><div><Cloud size={15}/> Simpan otomatis ke cloud</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
     </aside>
     <main className="editor-area">
       <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
@@ -170,31 +170,31 @@ export default function App(){
     </main>
     <aside className="ai-panel">
       <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><span>Router</span></div>
-      <div className="ai-body">{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>AI Coding Assistant</h3><p>Analisis file, cari bug, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>setAi("Optimalkan kode ini")}>Optimalkan</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div></div>)}</div>}</div>
-      <div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanya MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
+      <div className="ai-body">{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>Asisten Kode AI</h3><p>Analisis file, cari kesalahan, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>setAi("Optimalkan kode ini")}>Optimalkan</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div></div>)}</div>}</div>
+      <div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan sesuatu kepada MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
       <div className="provider">MAX Router · {routerConfig.model}</div>
     </aside>
    </div>
    {routerOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setRouterOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>MAX Router</strong><button onClick={()=>setRouterOpen(false)}><X size={18}/></button></div>
-     <p>Hubungkan editor ke API OpenAI-compatible Max Router.</p>
+     <p>Hubungkan editor ke API yang kompatibel dengan OpenAI melalui Max Router.</p>
      <label>Base URL<input value={routerConfig.baseUrl} onChange={e=>setRouterConfig(x=>({...x,baseUrl:e.target.value}))}/></label>
      <label>API Key<input type="password" value={routerConfig.apiKey} onChange={e=>setRouterConfig(x=>({...x,apiKey:e.target.value}))} placeholder="Bearer key dari Max Router"/></label>
      <div className="router-model-stats">
-       <div><span>Total model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
+       <div><span>Jumlah model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
        <div><span>Gratis</span><strong className="free">{routerStats.loading?"…":routerStats.free}</strong></div>
        <div><span>Berbayar</span><strong className="paid">{routerStats.loading?"…":routerStats.paid}</strong></div>
        <div><span>Harga tidak diketahui</span><strong>{routerStats.loading?"…":routerStats.unknown}</strong></div>
      </div>
-     <div className="router-sync-line">{routerStats.syncedAt?"Sinkron terakhir "+routerStats.syncedAt:"Belum disinkron"}{routerStats.error?" · "+routerStats.error:""}</div>
-     <div className="router-status-box">{routerStatus||"Daftar model akan disinkron otomatis dari Max Router."}</div>
-     <div><button onClick={syncRouterModels} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkron model</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
+     <div className="router-sync-line">{routerStats.syncedAt?"Sinkron terakhir "+routerStats.syncedAt:"Belum disinkronkan"}{routerStats.error?" · "+routerStats.error:""}</div>
+     <div className="router-status-box">{routerStatus||"Daftar model akan disinkronkan otomatis dari Max Router."}</div>
+     <div><button onClick={syncRouterModels} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkronkan model</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
    </div></div>}
    {integrationsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setIntegrationsOpen(false)}}><div className="router-modal">
-     <div className="router-modal-head"><strong>Integrasi Developer</strong><button onClick={()=>setIntegrationsOpen(false)}><X size={18}/></button></div>
-     <div className="integration-row"><Github size={18}/><div><strong>GitHub</strong><small>Gunakan terminal lokal untuk clone, pull, commit, dan push tanpa menyimpan token di browser.</small></div></div>
-     <div className="integration-row"><GitBranch size={18}/><div><strong>GitLab</strong><small>Command GitLab juga dapat dijalankan melalui Local Agent.</small></div></div>
-     <div className="integration-row"><Terminal size={18}/><div><strong>Local Agent</strong><small>{localStatus}</small><button className="wide" onClick={connectLocal}>Hubungkan Local Agent</button></div></div>
+     <div className="router-modal-head"><strong>Integrasi Pengembang</strong><button onClick={()=>setIntegrationsOpen(false)}><X size={18}/></button></div>
+     <div className="integration-row"><Github size={18}/><div><strong>GitHub</strong><small>Gunakan terminal lokal untuk mengambil, menarik, melakukan commit, dan mengirim perubahan tanpa menyimpan token di browser.</small></div></div>
+     <div className="integration-row"><GitBranch size={18}/><div><strong>GitLab</strong><small>Perintah GitLab juga dapat dijalankan melalui Local Agent.</small></div></div>
+     <div className="integration-row"><Terminal size={18}/><div><strong>Local Agent</strong><small>{localStatus}</small><button className="wide" onClick={connectLocal}>Hubungkan Agen Lokal</button></div></div>
      <button className="wide" onClick={()=>{setIntegrationsOpen(false);setTerminal(true);connectLocal()}}>Buka Terminal</button>
    </div></div>}
  </div>
