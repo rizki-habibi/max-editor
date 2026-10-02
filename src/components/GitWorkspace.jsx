@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from "react";
-import {AlertTriangle,CheckCircle2,Download,GitCabang,GitCommit,Github,SegarkanCw,X} from "lucide-react";
+import {AlertTriangle,CheckCircle2,Download,GitBranch,GitCommit,Github,RefreshCw,X} from "lucide-react";
 
 export default function GitWorkspace(){
   const [open,setOpen]=useState(false);
