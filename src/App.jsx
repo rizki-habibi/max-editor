@@ -2,6 +2,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
 import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot} from "lucide-react";
 import {supabase} from "./lib/supabase";
+import {loadWorkspace,saveFiles} from "./lib/editorDb";
 import {chatWithRouter,getRouterConfig,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
 
@@ -48,7 +49,7 @@ function CloudAuth({onSession}){
  return <div className="auth-screen">
   <div className="comic-orbit orbit-a"></div><div className="comic-orbit orbit-b"></div><div className="auth-spark spark-a">✦</div><div className="auth-spark spark-b">★</div>
   <div className="auth-wrap">
-   <section className="auth-hero"><div className="hero-kicker">DUNIA MAX <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HAI, PEMBUAT KODE!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">KODE.<br/><em>BUAT.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · Supabase Cloud · MAX AI</div><div className="hero-lines"></div></section>
+   <section className="auth-hero"><div className="hero-kicker">DUNIA MAX <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HAI, PEMBUAT KODE!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">KODE.<br/><em>BUAT.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · PostgreSQL Cloud · MAX AI</div><div className="hero-lines"></div></section>
    <form className="auth-card" onSubmit={go}>
     <div className="auth-card-top"><span className="panel-tag">AKSES CLOUD</span><span className="panel-dots">● ● ●</span></div>
     <div className="auth-card-icon"><LogIn size={20}/></div>
@@ -107,12 +108,12 @@ export default function App(){
   }catch(e){setRouterStats(x=>({...x,loading:false,error:e.message||"Gagal sinkron model."}));return []}
  }
  useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);
- useEffect(()=>{if(!session)return;(async()=>{filesHydrated.current=false;let {data:w}=await supabase.from("editor_workspaces").select("*").eq("owner_id",session.user.id).order("created_at").limit(1).maybeSingle();if(!w){const r=await supabase.from("editor_workspaces").insert({owner_id:session.user.id,name:"MAX Workspace"}).select().single();w=r.data;if(w)await supabase.from("editor_files").insert(Object.entries(initialFiles).map(([path,content])=>({workspace_id:w.id,path,content,language:path.endsWith(".md")?"markdown":"javascript"})))}setWorkspace(w);if(w){const {data,error}=await supabase.from("editor_files").select("*").eq("workspace_id",w.id).order("path");if(!error){const cloud=Object.fromEntries((data||[]).map(x=>[x.path,x.content]));setFiles(Object.keys(cloud).length?cloud:initialFiles);const savedActive=localStorage.getItem("max-editor.active."+session.user.id);if(savedActive)setActive(savedActive);setSyncState({status:"Tersimpan",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(cloud).length});}}filesHydrated.current=true;})()},[session]);
+ useEffect(()=>{if(!session)return;(async()=>{filesHydrated.current=false;try{const data=await loadWorkspace(session);setWorkspace(data.workspace);const cloud=Object.fromEntries((data.files||[]).map(x=>[x.path,x.content]));setFiles(Object.keys(cloud).length?cloud:initialFiles);const savedActive=localStorage.getItem("max-editor.active."+session.user.id);if(savedActive)setActive(savedActive);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(cloud).length});}catch(error){setFiles(initialFiles);setSyncState({status:"Gagal memuat PostgreSQL",lastSync:null,error:error.message,count:0});}finally{filesHydrated.current=true;}})()},[session]);
  const code=files[active]??"";
  const language=useMemo(()=>active.endsWith(".md")?"markdown":active.endsWith(".json")?"json":active.endsWith(".css")?"css":active.endsWith(".html")?"html":"javascript",[active]);
 
  function updateCode(value){setFiles(f=>({...f,[active]:value??""}));setSaved(false);setSyncState(x=>({...x,status:"Perubahan lokal belum diunggah"}))}
- async function saveAll(reason="manual"){if(!workspace||!filesHydrated.current)return;const entries=Object.entries(files);if(!entries.length)return;setSyncState(x=>({...x,status:reason==="timer"?"Sinkronisasi otomatis...":"Menyimpan...",error:""}));const rows=entries.map(([path,content])=>({workspace_id:workspace.id,path,content,language:path.endsWith(".md")?"markdown":path.endsWith(".json")?"json":path.endsWith(".css")?"css":path.endsWith(".html")?"html":"javascript"}));const r=await supabase.from("editor_files").upsert(rows,{onConflict:"workspace_id,path"});if(r.error){setSaved(false);setSyncState(x=>({...x,status:"Gagal menyimpan",error:r.error.message}));}else{setSaved(true);setSyncState({status:"Tersimpan di cloud",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:entries.length});}}
+ async function saveAll(reason="manual"){if(!workspace||!filesHydrated.current)return;const entries=Object.entries(files);if(!entries.length)return;setSyncState(x=>({...x,status:reason==="timer"?"Sinkronisasi otomatis...":"Menyimpan ke PostgreSQL...",error:""}));try{await saveFiles(session,workspace.id,entries.map(([path,content])=>({path,content,language:path.endsWith(".md")?"markdown":path.endsWith(".json")?"json":path.endsWith(".css")?"css":path.endsWith(".html")?"html":"javascript"})));setSaved(true);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:entries.length});}catch(error){setSaved(false);setSyncState(x=>({...x,status:"Gagal menyimpan",error:error.message}));}}
  async function save(){await saveAll("manual")}
  useEffect(()=>{if(!session||!filesHydrated.current)return;localStorage.setItem("max-editor.active."+session.user.id,active);},[active,files,session]);
  useEffect(()=>{if(!session||!filesHydrated.current)return;clearTimeout(saveTimer.current);saveTimer.current=setTimeout(()=>saveAll("debounce"),2000);return()=>clearTimeout(saveTimer.current)},[files,session,workspace]);
@@ -151,7 +152,7 @@ export default function App(){
    <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">AKTIF</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"Supabase Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
@@ -161,7 +162,7 @@ export default function App(){
       <div className="folder"><Folder size={15}/><span>src</span></div>
       <FileItem name="App.js" active={active==="src/App.js"} onClick={()=>setActive("src/App.js")}/>
       <FileItem name="index.js" active={active==="src/index.js"} onClick={()=>setActive("src/index.js")}/>
-      <div className="side-bottom"><div><Cloud size={15}/> Simpan otomatis ke cloud</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
+      <div className="side-bottom"><div><Cloud size={15}/> Simpan otomatis ke PostgreSQL</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
     </aside>
     <main className="editor-area">
       <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
