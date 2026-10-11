@@ -71,6 +71,7 @@ export default function App(){
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
  const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
+ const [routerModels,setRouterModels]=useState([]);
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
  const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
@@ -83,10 +84,10 @@ export default function App(){
   return values.some(v=>v>0) ? "paid" : "free";
  }
  async function syncRouterModels(){
-  if(!routerConfig.apiKey){setRouterStats(x=>({...x,error:"API key Max Router belum diisi.",loading:false}));return []}
   setRouterStats(x=>({...x,loading:true,error:""}));
   try{
    const models=await listRouterModels(routerConfig);
+   setRouterModels(models);
    const counts=models.reduce((a,m)=>{a[classifyModelPricing(m)]++;return a},{free:0,paid:0,unknown:0});
    setRouterStats({total:models.length,...counts,syncedAt:new Date().toLocaleTimeString("id-ID"),loading:false,error:""});
    if(models.length && !models.some(m=>m.id===routerConfig.model)){
@@ -147,7 +148,7 @@ export default function App(){
 }
  async function testRouter(){setRouterStatus("Memeriksa...");const models=await syncRouterModels();if(models.length)setRouterStatus("Terhubung · "+models.length+" model");else setRouterStatus(routerStats.error||"Tidak ada model aktif.")}
  function saveRouterLocal(){saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus("Konfigurasi tersimpan")}
- useEffect(()=>{if(!routerConfig.apiKey)return;syncRouterModels();const timer=setInterval(syncRouterModels,60000);return()=>clearInterval(timer)},[routerConfig.apiKey,routerConfig.baseUrl]);
+ useEffect(()=>{if(!session)return;syncRouterModels();const timer=setInterval(syncRouterModels,60000);return()=>clearInterval(timer)},[session]);
  function connectLocal(){
   if(localSocket.current?.readyState===WebSocket.OPEN){setLocalStatus("Local Agent terhubung");return}
   try{
@@ -192,17 +193,17 @@ export default function App(){
       <div className="statusbar"><span>Ln 1, Col 1</span><span>{language}</span><span>UTF-8</span><button onClick={()=>setTerminal(!terminal)}><Terminal size={13}/> Terminal</button></div>
     </main>
     <aside className="ai-panel">
-      <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><span>Router</span></div>
+      <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?routerConfig.model.split("/").slice(-1)[0]:"Pilih model"} <ChevronDown size={12}/></button></div>
       <div className="ai-body">{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>Asisten Kode AI</h3><p>Analisis file, cari kesalahan, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>setAi("Optimalkan kode ini")}>Optimalkan</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div></div>)}</div>}</div>
       <div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan sesuatu kepada MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
-      <div className="provider">MAX Router · {routerConfig.model}</div>
+      <div className="provider">MAX Router · {routerConfig.model||"Pilih model"} · {routerModels.length} model</div>
     </aside>
    </div>
    {routerOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setRouterOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>MAX Router</strong><button onClick={()=>setRouterOpen(false)}><X size={18}/></button></div>
      <p>Hubungkan editor ke API yang kompatibel dengan OpenAI melalui Max Router.</p>
-     <label>Base URL<input value={routerConfig.baseUrl} onChange={e=>setRouterConfig(x=>({...x,baseUrl:e.target.value}))}/></label>
-     <label>API Key<input type="password" value={routerConfig.apiKey} onChange={e=>setRouterConfig(x=>({...x,apiKey:e.target.value}))} placeholder="Bearer key dari Max Router"/></label>
+     <label>Pilih model AI<select value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value}))}><option value="">Pilih model dari MAX Router</option>{routerModels.map(m=><option key={m.id} value={m.id}>{m.id}</option>)}</select></label>
+     <p>Daftar model diambil langsung dari MAX Router. API key dikelola di server Railway.</p>
      <div className="router-model-stats">
        <div><span>Jumlah model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
        <div><span>Gratis</span><strong className="free">{routerStats.loading?"…":routerStats.free}</strong></div>
