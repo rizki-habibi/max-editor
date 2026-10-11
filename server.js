@@ -29,8 +29,8 @@ app.post("/api/auth/login",(req,res)=>{
  const submitted=String(req.body?.password||"");
  const a=Buffer.from(submitted),b=Buffer.from(EDITOR_PASSWORD);
  if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.status(401).json({error:"Kata sandi tidak valid."});
- const token=signSession({uid:"max-editor-admin",exp:Date.now()+12*60*60*1000});
- res.setHeader("Set-Cookie","max_editor_session="+encodeURIComponent(token)+"; HttpOnly; Path=/; SameSite=Lax; Max-Age=43200"+(process.env.NODE_ENV==="production"?"; Secure":""));
+ const token=signSession({uid:"max-editor-admin",exp:Date.now()+30*24*60*60*1000});
+ res.setHeader("Set-Cookie","max_editor_session="+encodeURIComponent(token)+"; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000"+(process.env.NODE_ENV==="production"?"; Secure":""));
  res.json({ok:true,user:{id:"max-editor-admin"}});
 });
 app.get("/api/auth/session",(req,res)=>{const session=readSession(req);if(!session)return res.status(401).json({error:"Belum masuk."});res.json({user:{id:session.uid}});});
