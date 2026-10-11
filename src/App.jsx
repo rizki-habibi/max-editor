@@ -1,7 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
 import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot} from "lucide-react";
-import {supabase} from "./lib/supabase";
 import {loadWorkspace,saveFiles} from "./lib/editorDb";
 import {chatWithRouter,getRouterConfig,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
@@ -31,46 +30,36 @@ function FileItem({name,active,onClick,folder=false}) {
 }
 
 function CloudAuth({onSession}){
- const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[signup,setSignup]=useState(false),[msg,setMsg]=useState(""),[loading,setLoading]=useState("");
- useEffect(()=>{
-  const query=new URLSearchParams(window.location.search);
-  const hash=new URLSearchParams(window.location.hash.replace(/^#/,""));
-  const authError=query.get("error_description")||query.get("error")||hash.get("error_description")||hash.get("error");
-  if(authError){setMsg(decodeURIComponent(authError.replace(/\+/g," ")));window.history.replaceState({},document.title,window.location.pathname);}
- },[]);
- async function go(e){e.preventDefault();setMsg("");setLoading("email");const r=signup?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});setLoading("");if(r.error)setMsg(r.error.message);else if(r.data.session)onSession(r.data.session);else setMsg("Akun dibuat. Cek email untuk konfirmasi jika diminta.");}
- async function oauth(provider){
-  setMsg("");setLoading(provider);
-  const redirectTo=window.location.origin;
-  const {data,error}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo}});
-  if(error){setLoading("");setMsg(error.message);return;}
-  if(!data?.url){setLoading("");setMsg("Supabase tidak memberikan URL login OAuth.");}
+ const [password,setPassword]=useState("");
+ const [msg,setMsg]=useState("");
+ const [loading,setLoading]=useState(false);
+ async function go(e){
+  e.preventDefault();setMsg("");setLoading(true);
+  try{
+   const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({password})});
+   const data=await r.json();
+   if(!r.ok)throw new Error(data.error||"Kata sandi tidak valid.");
+   onSession({user:{id:data.user.id},access_token:"cookie-session"});
+  }catch(error){setMsg(error.message||"Gagal masuk.");}
+  finally{setLoading(false);}
  }
  return <div className="auth-screen">
   <div className="comic-orbit orbit-a"></div><div className="comic-orbit orbit-b"></div><div className="auth-spark spark-a">✦</div><div className="auth-spark spark-b">★</div>
   <div className="auth-wrap">
    <section className="auth-hero"><div className="hero-kicker">DUNIA MAX <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HAI, PEMBUAT KODE!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">KODE.<br/><em>BUAT.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · PostgreSQL Cloud · MAX AI</div><div className="hero-lines"></div></section>
    <form className="auth-card" onSubmit={go}>
-    <div className="auth-card-top"><span className="panel-tag">AKSES CLOUD</span><span className="panel-dots">● ● ●</span></div>
+    <div className="auth-card-top"><span className="panel-tag">AKSES PANEL</span><span className="panel-dots">● ● ●</span></div>
     <div className="auth-card-icon"><LogIn size={20}/></div>
-    <h1>{signup?"Buat akun":"Masuk ke MAX Editor"}</h1><p>{signup?"Gunakan akun Google atau GitHub agar akses workspace mudah dipulihkan.":"Pilih akun yang biasa kamu gunakan untuk coding."}</p>
-    <div className="oauth-grid">
-      <button type="button" className="oauth-button github" onClick={()=>oauth("github")} disabled={!!loading}><Github size={18}/><span>{loading==="github"?"Menghubungkan...":"GitHub"}</span></button>
-      <button type="button" className="oauth-button google" onClick={()=>oauth("google")} disabled={!!loading}><span className="google-g">G</span><span>{loading==="google"?"Menghubungkan...":"Google"}</span></button>
-    </div>
-    <div className="auth-divider"><span>atau email</span></div>
-    <label>Email<input type="email" placeholder="nama@email.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required/></label>
-    <label>Password<input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} minLength="6" autoComplete={signup?"new-password":"current-password"} required/></label>
+    <h1>Masuk ke MAX Editor</h1><p>Masukkan kata sandi panel untuk membuka workspace.</p>
+    <label>Kata sandi<input type="password" placeholder="Masukkan kata sandi" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" required autoFocus/></label>
     {msg&&<div className="auth-message">{msg}</div>}
-    <button className="auth-submit" type="submit" disabled={!!loading}><LogIn size={17}/>{loading==="email"?"Memproses...":signup?"Buat akun":"Masuk"}<span>→</span></button>
-    <button type="button" className="switch-auth" onClick={()=>{setSignup(!signup);setMsg("")}}>{signup?"Sudah punya akun? Masuk":"Belum punya akun? Buat akun dengan email"}</button>
-    <div className="auth-foot"><span>● Ruang kerja cloud</span><span>● Akun tersimpan</span></div>
+    <button className="auth-submit" type="submit" disabled={loading}><LogIn size={17}/>{loading?"Memeriksa...":"Masuk"}<span>→</span></button>
+    <div className="auth-foot"><span>● Ruang kerja cloud</span><span>● Sesi aman</span></div>
    </form>
   </div>
   <div className="comic-note">BANGUN<br/><strong>DUNIAMU</strong></div>
  </div>
 }
-
 export default function App(){
  const [files,setFiles]=useState({});
  const [session,setSession]=useState(null);
@@ -107,7 +96,7 @@ export default function App(){
    return models;
   }catch(e){setRouterStats(x=>({...x,loading:false,error:e.message||"Gagal sinkron model."}));return []}
  }
- useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>setSession(data.session));const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>subscription.unsubscribe()},[]);
+ useEffect(()=>{let active=true;fetch("/api/auth/session",{credentials:"same-origin"}).then(async r=>{if(!r.ok)return null;return r.json()}).then(data=>{if(active&&data?.user)setSession({user:data.user,access_token:"cookie-session"});}).catch(()=>{});return()=>{active=false}},[]);
  useEffect(()=>{if(!session)return;(async()=>{filesHydrated.current=false;try{const data=await loadWorkspace(session);setWorkspace(data.workspace);const cloud=Object.fromEntries((data.files||[]).map(x=>[x.path,x.content]));setFiles(Object.keys(cloud).length?cloud:initialFiles);const savedActive=localStorage.getItem("max-editor.active."+session.user.id);if(savedActive)setActive(savedActive);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(cloud).length});}catch(error){setFiles(initialFiles);setSyncState({status:"Gagal memuat PostgreSQL",lastSync:null,error:error.message,count:0});}finally{filesHydrated.current=true;}})()},[session]);
  const code=files[active]??"";
  const language=useMemo(()=>active.endsWith(".md")?"markdown":active.endsWith(".json")?"json":active.endsWith(".css")?"css":active.endsWith(".html")?"html":"javascript",[active]);
@@ -146,13 +135,12 @@ export default function App(){
   if(!localSocket.current||localSocket.current.readyState!==WebSocket.OPEN){setTerminalLines(x=>[...x,"Local Agent belum terhubung. Klik Integrasi → Local Agent → Hubungkan."]);return}
   localSocket.current.send(JSON.stringify({type:"exec",command}));
  }
- if(!supabase)return <div className="auth-screen"><div className="auth-card"><h1>MAX Editor</h1><p>Supabase belum dikonfigurasi.</p></div></div>;
  if(!session)return <CloudAuth onSession={setSession}/>;
  return <div className="app">
    <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">AKTIF</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={()=>supabase.auth.signOut()} title="Keluar"><LogOut size={16}/></button></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});setSession(null)}} title="Keluar"><LogOut size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
