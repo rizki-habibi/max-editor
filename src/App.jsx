@@ -71,7 +71,7 @@ export default function App(){
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
  const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
- const [routerModels,setRouterModels]=useState([]); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0);
+ const [routerModels,setRouterModels]=useState([]); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0); const [typingCode,setTypingCode]=useState(false); const [codeApplyStatus,setCodeApplyStatus]=useState(""); const typingTimer=useRef(null);
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
  const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
@@ -112,10 +112,35 @@ export default function App(){
  function createFile(){const n=prompt("Nama file baru");if(!n)return;setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
  async function importFolder(){if(!window.showDirectoryPicker){dirInput.current?.click();return}try{const root=await window.showDirectoryPicker();const next={};async function walk(handle,path=""){for await(const [name,entry] of handle.entries()){if(name==="node_modules"||name===".git"||name==="dist"||name==="build")continue;const p=path?path+"/"+name:name;if(entry.kind==="file"){try{const file=await entry.getFile();if(file.size<2000000)next[p]=await file.text()}catch{}}else await walk(entry,p)}}await walk(root);setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}catch(e){if(e.name!=="AbortError")setLocalStatus("Gagal: "+e.message)}}
  async function importSelectedFiles(e){const next={};for(const file of [...e.target.files])if(file.size<2000000)next[file.webkitRelativePath||file.name]=await file.text();setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}
+ function extractCodeBlock(message){
+  const match=String(message||"").match(/```(?:[a-zA-Z0-9_+#.-]+)?\s*\n([\s\S]*?)\n```/);
+  return match?match[1]:null;
+ }
+ function requestCodingMode(prompt){
+  setAi(prompt+"\n\nMode kerja: CODING LANGSUNG. Buat solusi untuk file aktif `"+active+"`. Jika file ini yang harus diubah, balas dengan satu blok kode lengkap berformat ```"+(language==="markdown"?"markdown":language==="javascript"?"javascript":language)+"\n...kode lengkap...\n```. Jangan hanya memberi potongan kode. Sebelum blok, jelaskan singkat apa yang akan diterapkan.");
+ }
+ function applyCodeProposal(message){
+  const proposal=extractCodeBlock(message);
+  if(proposal===null){setCodeApplyStatus("Respons ini tidak memiliki blok kode lengkap untuk diterapkan.");return;}
+  if(typingTimer.current)clearInterval(typingTimer.current);
+  setTypingCode(true);setCodeApplyStatus("AI sedang mengetik kode ke "+active+"…");
+  const target=proposal;let index=0;const chunk=18;
+  setFiles(current=>({...current,[active]:""}));setSaved(false);
+  typingTimer.current=setInterval(()=>{
+   index=Math.min(index+chunk,target.length);
+   const partial=target.slice(0,index);
+   setFiles(current=>({...current,[active]:partial}));
+   if(index>=target.length){
+    clearInterval(typingTimer.current);typingTimer.current=null;setTypingCode(false);
+    setSaved(false);setCodeApplyStatus("Kode diterapkan ke "+active+". Menyimpan otomatis…");
+    setTimeout(()=>setCodeApplyStatus(""),4500);
+   }
+  },12);
+ }
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
   setAi("");setAiBusy(true);setAiStartedAt(Date.now());setAiElapsed(0);
-  const msgs=[...aiMessages,{role:"user",content:prompt+"\\n\\nFile aktif: "+active+"\\nIsi file:\\n"+code.slice(0,18000)}];
+  const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];
   setAiMessages(msgs);
   try{
    let result,activeModel=routerConfig.model,lastError;
@@ -194,8 +219,8 @@ export default function App(){
     </main>
     <aside className="ai-panel">
       <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?routerConfig.model.split("/").slice(-1)[0]:"Pilih model"} <ChevronDown size={12}/></button></div>
-      <div className="ai-body">{aiBusy&&<div className="ai-working"><span className="ai-spinner"></span><div><strong>MAX AI sedang berpikir…</strong><small>{aiElapsed<10?"Mengirim permintaan dan menunggu model":aiElapsed<35?"Menganalisis konteks kode":aiElapsed<90?"Menyusun respons atau perubahan kode":"Respons lebih lama dari biasanya"} · {Math.floor(aiElapsed/60)}:{String(aiElapsed%60).padStart(2,"0")}</small><div className="ai-progress"><i style={{width:Math.min(96,12+aiElapsed*1.2)+"%"}}/></div></div></div>}{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>Asisten Kode AI</h3><p>Analisis file, cari kesalahan, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>setAi("Optimalkan kode ini")}>Optimalkan</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div></div>)}</div>}</div>
-      <div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan sesuatu kepada MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
+      <div className="ai-body">{aiBusy&&<div className="ai-working"><span className="ai-spinner"></span><div><strong>MAX AI sedang berpikir…</strong><small>{aiElapsed<10?"Mengirim permintaan dan menunggu model":aiElapsed<35?"Menganalisis konteks kode":aiElapsed<90?"Menyusun respons atau perubahan kode":"Respons lebih lama dari biasanya"} · {Math.floor(aiElapsed/60)}:{String(aiElapsed%60).padStart(2,"0")}</small><div className="ai-progress"><i style={{width:Math.min(96,12+aiElapsed*1.2)+"%"}}/></div></div></div>}{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>Asisten Kode AI</h3><p>Analisis file, cari kesalahan, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>requestCodingMode("Perbaiki dan optimalkan file aktif ini")}>Ngoding langsung</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div>{m.role==="assistant"&&extractCodeBlock(m.content)!==null&&<button className="apply-code-button" disabled={typingCode} onClick={()=>applyCodeProposal(m.content)}>{typingCode?"AI sedang mengetik…":"Terapkan kode ke editor"}</button>}</div>)}</div>}</div>
+      {codeApplyStatus&&<div className="code-apply-status"><span className={typingCode?"typing-cursor":""}></span>{codeApplyStatus}</div>}<div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan sesuatu kepada MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
       <div className="provider">MAX Router · {routerConfig.model||"Pilih model"} · {routerModels.length} model</div>
     </aside>
    </div>
