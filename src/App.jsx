@@ -111,7 +111,40 @@ export default function App(){
  function createFile(){const n=prompt("Nama file baru");if(!n)return;setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
  async function importFolder(){if(!window.showDirectoryPicker){dirInput.current?.click();return}try{const root=await window.showDirectoryPicker();const next={};async function walk(handle,path=""){for await(const [name,entry] of handle.entries()){if(name==="node_modules"||name===".git"||name==="dist"||name==="build")continue;const p=path?path+"/"+name:name;if(entry.kind==="file"){try{const file=await entry.getFile();if(file.size<2000000)next[p]=await file.text()}catch{}}else await walk(entry,p)}}await walk(root);setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}catch(e){if(e.name!=="AbortError")setLocalStatus("Gagal: "+e.message)}}
  async function importSelectedFiles(e){const next={};for(const file of [...e.target.files])if(file.size<2000000)next[file.webkitRelativePath||file.name]=await file.text();setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}
- async function sendAi(){const prompt=ai.trim();if(!prompt||aiBusy)return;setAi("");setAiBusy(true);const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];setAiMessages(msgs);try{const result=await chatWithRouter(routerConfig,msgs);setAiMessages(m=>[...m,{role:"assistant",content:result}])}catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}])}finally{setAiBusy(false)}}
+ async function sendAi(){
+  const prompt=ai.trim();if(!prompt||aiBusy)return;
+  setAi("");setAiBusy(true);
+  const msgs=[...aiMessages,{role:"user",content:prompt+"\\n\\nFile aktif: "+active+"\\nIsi file:\\n"+code.slice(0,18000)}];
+  setAiMessages(msgs);
+  try{
+   let result,activeModel=routerConfig.model,lastError;
+   try{result=await chatWithRouter(routerConfig,msgs);}catch(e){lastError=e;}
+   if(result===undefined){
+    const errorText=String(lastError?.message||lastError||"");
+    const shouldFailover=/403|401|429|500|502|503|504|account_suspended|suspended|rate.?limit|quota|overload|temporar|unavailable|no credentials/i.test(errorText);
+    if(!shouldFailover)throw lastError;
+    setAiMessages(m=>[...m,{role:"assistant",content:"Model "+(routerConfig.model||"(belum dipilih)")+" gagal. Mendeteksi model alternatif dan mencoba otomatis…"}]);
+    const models=await listRouterModels(routerConfig);
+    const candidates=models.filter(m=>m?.id&&m.id!==routerConfig.model);
+    if(!candidates.length)throw new Error(errorText+"\\nTidak ada model alternatif yang terdaftar di MAX Router.");
+    let switched=false;
+    for(const candidate of candidates){
+     try{
+      result=await chatWithRouter({...routerConfig,model:candidate.id},msgs);
+      activeModel=candidate.id;switched=true;break;
+     }catch(e){lastError=e;}
+    }
+    if(!switched)throw new Error("Semua model alternatif gagal. Error terakhir: "+String(lastError?.message||lastError||errorText));
+    const next={...routerConfig,model:activeModel};
+    setRouterConfig(next);saveRouterConfig(next);
+    setRouterStatus("Otomatis beralih ke model aktif: "+activeModel);
+    setAiMessages(m=>[...m,{role:"assistant",content:"Berhasil beralih otomatis ke model "+activeModel+" karena model sebelumnya gagal.\\n\\n"+result}]);
+    return;
+   }
+   setAiMessages(m=>[...m,{role:"assistant",content:result}]);
+  }catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}]);}
+  finally{setAiBusy(false)}
+}
  async function testRouter(){setRouterStatus("Memeriksa...");const models=await syncRouterModels();if(models.length)setRouterStatus("Terhubung · "+models.length+" model");else setRouterStatus(routerStats.error||"Tidak ada model aktif.")}
  function saveRouterLocal(){saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus("Konfigurasi tersimpan")}
  useEffect(()=>{if(!routerConfig.apiKey)return;syncRouterModels();const timer=setInterval(syncRouterModels,60000);return()=>clearInterval(timer)},[routerConfig.apiKey,routerConfig.baseUrl]);
