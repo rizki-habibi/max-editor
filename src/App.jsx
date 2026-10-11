@@ -7,15 +7,6 @@ import GitWorkspace from "./components/GitWorkspace";
 import DocumentsPanel from "./components/DocumentsPanel";
 
 const initialFiles={
-  "README.md": `# MAX Editor
-
-Editor coding online berbasis browser.
-
-- Monaco Editor
-- Workspace cloud siap Supabase
-- AI panel siap Max Router
-- GitHub integration siap dikembangkan
-`,
   "src/App.js": `export default function hello() {
   console.log('Hello from MAX Editor');
 }
@@ -66,7 +57,7 @@ export default function App(){
  const [documentsOpen,setDocumentsOpen]=useState(false);
  const [session,setSession]=useState(null);
  const [workspace,setWorkspace]=useState(null);
- const [active,setActive]=useState("README.md");
+ const [active,setActive]=useState("src/App.js");
  const [ai,setAi]=useState("");
  const [terminal,setTerminal]=useState(false); const [bottomTab,setBottomTab]=useState("Terminal"); const [buildStatus,setBuildStatus]=useState("Belum dijalankan"); const [problems,setProblems]=useState([]);
  const [saved,setSaved]=useState(true);
