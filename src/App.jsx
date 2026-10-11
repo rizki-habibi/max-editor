@@ -104,7 +104,7 @@ export default function App(){
  const code=files[active]??"";
  const changeStats=useMemo(()=>{const before=String(originalFiles[active]??"").split("\n"),after=String(code).split("\n");let added=0,removed=0;const max=Math.max(before.length,after.length);for(let i=0;i<max;i++){if(before[i]===undefined&&after[i]!==undefined)added++;else if(after[i]===undefined&&before[i]!==undefined)removed++;else if(before[i]!==after[i]){added++;removed++;}}return {added,removed};},[originalFiles,active,code]);
  useEffect(()=>{const editor=editorRef.current;if(!editor)return;const before=String(originalFiles[active]??"").split("\n"),after=String(code).split("\n");const max=Math.max(before.length,after.length),next=[];for(let i=0;i<max;i++){if(before[i]===after[i])continue;const line=Math.min(i+1,Math.max(1,after.length));next.push({range:new editor.monaco.Range(line,1,line,1),options:{isWholeLine:true,linesDecorationsClassName:before[i]===undefined?"max-gutter-added":after[i]===undefined?"max-gutter-removed":"max-gutter-modified",className:before[i]===undefined?"max-line-added":after[i]===undefined?"max-line-removed":"max-line-modified"}})}try{decorationsRef.current=editor.deltaDecorations(decorationsRef.current,next)}catch{}},[active,code,originalFiles]);
- const language=useMemo(()=>active.endsWith(".md")?"markdown":active.endsWith(".json")?"json":active.endsWith(".css")?"css":active.endsWith(".html")?"html":"javascript",[active]);
+ const language=useMemo(()=>{const ext=active.split(".").pop().toLowerCase();const map={md:"markdown",markdown:"markdown",json:"json",css:"css",scss:"scss",less:"less",html:"html",htm:"html",xml:"xml",svg:"xml",yaml:"yaml",yml:"yaml",py:"python",pyw:"python",java:"java",kt:"kotlin",kts:"kotlin",cs:"csharp",cpp:"cpp",cc:"cpp",c:"c",h:"c",go:"go",rs:"rust",php:"php",rb:"ruby",sql:"sql",sh:"shell",bash:"shell",ps1:"powershell",bat:"bat",cmd:"bat",vue:"html",svelte:"html",ts:"typescript",tsx:"typescript",jsx:"javascript",js:"javascript",mjs:"javascript",cjs:"javascript"};return map[ext]||"plaintext"},[active]);
 
  function updateCode(value){setFiles(f=>({...f,[active]:value??""}));setSaved(false);setSyncState(x=>({...x,status:"Perubahan lokal belum diunggah"}))}
  async function saveAll(reason="manual"){if(!workspace||!filesHydrated.current)return;const entries=Object.entries(files);if(!entries.length)return;setSyncState(x=>({...x,status:reason==="timer"?"Sinkronisasi otomatis...":"Menyimpan ke PostgreSQL...",error:""}));try{await saveFiles(session,workspace.id,entries.map(([path,content])=>({path,content,language:path.endsWith(".md")?"markdown":path.endsWith(".json")?"json":path.endsWith(".css")?"css":path.endsWith(".html")?"html":"javascript"})));setSaved(true);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:entries.length});}catch(error){setSaved(false);setSyncState(x=>({...x,status:"Gagal menyimpan",error:error.message}));}}
@@ -116,6 +116,11 @@ export default function App(){
  function createFile(){const n=prompt("Nama file baru");if(!n)return;setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
  async function importFolder(){if(!window.showDirectoryPicker){dirInput.current?.click();return}try{const root=await window.showDirectoryPicker();const next={};async function walk(handle,path=""){for await(const [name,entry] of handle.entries()){if(name==="node_modules"||name===".git"||name==="dist"||name==="build")continue;const p=path?path+"/"+name:name;if(entry.kind==="file"){try{const file=await entry.getFile();if(file.size<2000000)next[p]=await file.text()}catch{}}else await walk(entry,p)}}await walk(root);setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}catch(e){if(e.name!=="AbortError")setLocalStatus("Gagal: "+e.message)}}
  async function importSelectedFiles(e){const next={};for(const file of [...e.target.files])if(file.size<2000000)next[file.webkitRelativePath||file.name]=await file.text();setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}
+ function extractFileProposals(message){
+  const found=[];const re=/```file:([^\n`]+)\n([\s\S]*?)\n```/g;let match;
+  while((match=re.exec(String(message||"")))!==null){const path=match[1].trim().replace(/^['"]|['"]$/g,"");if(path&&!path.includes("..")&&!path.startsWith("/")&&!path.includes("\\"))found.push({path,content:match[2]});}
+  return found;
+ }
  function extractCodeBlock(message){
   const match=String(message||"").match(/```(?:[a-zA-Z0-9_+#.-]+)?\s*\n([\s\S]*?)\n```/);
   return match?match[1]:null;
@@ -124,6 +129,13 @@ export default function App(){
   setAi(prompt+"\n\nMode kerja: CODING LANGSUNG. Buat solusi untuk file aktif `"+active+"`. Jika file ini yang harus diubah, balas dengan satu blok kode lengkap berformat ```"+(language==="markdown"?"markdown":language==="javascript"?"javascript":language)+"\n...kode lengkap...\n```. Jangan hanya memberi potongan kode. Sebelum blok, jelaskan singkat apa yang akan diterapkan.");
  }
  function applyCodeProposal(message,targetPath=active){
+  const proposals=extractFileProposals(message);
+  if(proposals.length){
+   setFiles(current=>({...current,...Object.fromEntries(proposals.map(p=>[p.path,p.content]))}));
+   setActive(proposals[0].path);setSaved(false);setTypingCode(false);
+   setCodeApplyStatus("AI menerapkan "+proposals.length+" file: "+proposals.map(p=>p.path).join(", "));
+   setTimeout(()=>setCodeApplyStatus(""),7000);return;
+  }
   const proposal=extractCodeBlock(message);
   if(proposal===null){setCodeApplyStatus("Respons ini tidak memiliki blok kode lengkap untuk diterapkan.");return;}
   if(typingTimer.current)clearInterval(typingTimer.current);
@@ -131,23 +143,18 @@ export default function App(){
   const target=proposal;let index=0;const chunk=18;
   setFiles(current=>({...current,[targetPath]:""}));setSaved(false);
   typingTimer.current=setInterval(()=>{
-   index=Math.min(index+chunk,target.length);
-   const partial=target.slice(0,index);
+   index=Math.min(index+chunk,target.length);const partial=target.slice(0,index);
    setFiles(current=>({...current,[targetPath]:partial}));
-   if(index>=target.length){
-    clearInterval(typingTimer.current);typingTimer.current=null;setTypingCode(false);
-    setSaved(false);setCodeApplyStatus("Kode diterapkan ke "+targetPath+". Menyimpan otomatis…");
-    setTimeout(()=>setCodeApplyStatus(""),4500);
-   }
+   if(index>=target.length){clearInterval(typingTimer.current);typingTimer.current=null;setTypingCode(false);setSaved(false);setCodeApplyStatus("Kode diterapkan ke "+targetPath+". Menyimpan otomatis…");setTimeout(()=>setCodeApplyStatus(""),4500);}
   },12);
  }
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
-  const requestPath=active; const requestCode=files[active]??""; const wantsCoding=/\b(buat|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan|jelaskan|analisis|cek|review|cari|tambahkan fitur)\b/i.test(prompt);
+  const requestPath=active; const requestCode=files[active]??""; const wantsReport=/\b(laporan|report|laporkan|buatkan laporan|ringkasan laporan)\b/i.test(prompt); const wantsCoding=!wantsReport&&/\b(buat|bikin|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan|jelaskan|analisis|cek|review|cari|tambahkan fitur)\b/i.test(prompt);
   setAi("");setAiBusy(true);setAiStartedAt(Date.now());setAiElapsed(0);
   const workspaceIndex=Object.keys(files).sort().map(p=>(p===requestPath?"▶ ":"  ")+p).join("\n");
   const relatedFiles=Object.entries(files).filter(([p])=>p!==requestPath).slice(0,8).map(([p,c])=>"\n--- FILE: "+p+" ---\n"+String(c).slice(0,2200)).join("\n");
-  const codingInstructions=wantsCoding?"\n\nMODE AGEN CODING MAX EDITOR:\n- Baca konteks file aktif dan daftar file workspace sebelum memberi solusi.\n- Pertahankan gaya, dependensi, API, dan pola proyek yang sudah ada; jangan mengganti file dengan contoh generik atau dokumentasi yang tidak diminta.\n- Untuk perubahan pada file aktif, keluarkan tepat satu blok kode lengkap yang siap menggantikan file aktif. Gunakan bahasa yang sesuai ekstensi file.\n- Jangan menaruh kode file lain ke file aktif. Jika tugas membutuhkan banyak file, jelaskan file tambahan yang dibutuhkan; jangan pura-pura sudah mengubah file yang tidak dapat ditulis.\n- Hindari placeholder, TODO, kode palsu, dan klaim bahwa build/test sudah berhasil tanpa hasil tes nyata.\n- Pertahankan konfigurasi rahasia di environment; jangan meminta atau menampilkan API key.\n- Beri ringkasan singkat sebelum blok kode dan langkah verifikasi setelahnya.":"";
+  const codingInstructions=wantsReport?"\n\nMODE PEMBUAT LAPORAN: Susun laporan lengkap dalam Markdown dengan judul, ringkasan eksekutif, tujuan, metode/analisis, temuan, rekomendasi, kesimpulan, dan referensi bila tersedia. Jangan membuat klaim/fakta atau referensi palsu.":wantsCoding?"\n\nMODE AGEN CODING MAX EDITOR:\n- Baca konteks file aktif dan daftar file workspace sebelum memberi solusi.\n- Pertahankan gaya, dependensi, API, dan pola proyek yang sudah ada; jangan mengganti file dengan contoh generik atau dokumentasi yang tidak diminta.\n- Untuk satu file, keluarkan satu blok kode lengkap. Untuk banyak file, keluarkan satu blok per file dengan format persis ```file:src/nama-file.ext lalu kode lengkap lalu ```. Setiap path harus relatif dari root workspace.\n- Bisa membuat dan mengedit file selain README: kode, konfigurasi, dokumentasi, skrip, JSON/YAML, SQL, HTML/CSS, dan format teks lain. Jangan mengaku mengedit format biner yang tidak bisa direpresentasikan sebagai teks.\n- Hindari placeholder, TODO, kode palsu, dan klaim bahwa build/test sudah berhasil tanpa hasil tes nyata.\n- Pertahankan konfigurasi rahasia di environment; jangan meminta atau menampilkan API key.\n- Beri ringkasan singkat sebelum blok kode dan langkah verifikasi setelahnya.":"";
   const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+requestPath+"\nDaftar file workspace:\n"+workspaceIndex+"\n\nIsi file aktif:\n"+requestCode.slice(0,18000)+relatedFiles+codingInstructions}];
   setAiMessages(msgs);
   try{
@@ -177,6 +184,7 @@ export default function App(){
     return;
    }
    setAiMessages(m=>[...m,{role:"assistant",content:result}]);
+   if(wantsReport){const stamp=new Date().toISOString().slice(0,16).replace("T","-").replaceAll(":","");const reportPath="laporan/Laporan-"+stamp+".md";setFiles(current=>({...current,[reportPath]:"# Laporan MAX AI\n\n"+result}));setOriginalFiles(current=>({...current,[reportPath]:""}));setActive(reportPath);setSaved(false);setCodeApplyStatus("Laporan dibuat sebagai "+reportPath+". Gunakan Dokumen & Ekspor untuk Word atau PDF.");}
    if(wantsCoding){const proposal=extractCodeBlock(result);if(proposal!==null){const ext=requestPath.split(".").pop().toLowerCase();const looksWrong=(ext==="js"||ext==="jsx"||ext==="ts"||ext==="tsx")&&(/^\s*<!doctype html>|^\s*<html[\s>]|^\s*#\s/m.test(proposal));if(!looksWrong)applyCodeProposal(result,requestPath);else setCodeApplyStatus("Kode tidak diterapkan otomatis karena formatnya tidak cocok dengan "+requestPath+".");}}
   }catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}]);}
   finally{setAiBusy(false);setAiStartedAt(null)}
