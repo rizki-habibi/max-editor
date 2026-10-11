@@ -4,6 +4,7 @@ import {FileCode2,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal
 import {loadWorkspace,saveFiles} from "./lib/editorDb";
 import {chatWithRouter,getRouterConfig,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
+import DocumentsPanel from "./components/DocumentsPanel";
 
 const initialFiles={
   "README.md": `# MAX Editor
@@ -62,6 +63,7 @@ function CloudAuth({onSession}){
 }
 export default function App(){
  const [files,setFiles]=useState({}); const [originalFiles,setOriginalFiles]=useState({}); const editorRef=useRef(null); const decorationsRef=useRef([]);
+ const [documentsOpen,setDocumentsOpen]=useState(false);
  const [session,setSession]=useState(null);
  const [workspace,setWorkspace]=useState(null);
  const [active,setActive]=useState("README.md");
@@ -208,7 +210,7 @@ export default function App(){
    <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
     <div className="brand"><span className="brand-mark">M</span><strong>MAX Editor</strong><span className="badge">AKTIF</span></div>
-    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});setSession(null)}} title="Keluar"><LogOut size={16}/></button></div>
+    <div className="top-actions"><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Buat dan ekspor dokumen" onClick={()=>setDocumentsOpen(true)}><FileText size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});setSession(null)}} title="Keluar"><LogOut size={16}/></button></div>
    </header>
    <div className="workspace">
     <aside className="sidebar">
@@ -248,6 +250,7 @@ export default function App(){
      <div className="router-status-box">{routerStatus||"Daftar model akan disinkronkan otomatis dari Max Router."}</div>
      <div><button onClick={syncRouterModels} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkronkan model</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
    </div></div>}
+   {documentsOpen&&<DocumentsPanel files={files} active={active} code={code} onClose={()=>setDocumentsOpen(false)} onCreate={(path,content)=>{setFiles(f=>({...f,[path]:content}));setOriginalFiles(f=>({...f,[path]:content}));setActive(path);setSaved(false);setSyncState(x=>({...x,status:"File dokumen baru dibuat"}));}}/>}
    {integrationsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setIntegrationsOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>Integrasi Pengembang</strong><button onClick={()=>setIntegrationsOpen(false)}><X size={18}/></button></div>
      <div className="integration-row"><Github size={18}/><div><strong>GitHub</strong><small>Gunakan terminal lokal untuk mengambil, menarik, melakukan commit, dan mengirim perubahan tanpa menyimpan token di browser.</small></div></div>
