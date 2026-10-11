@@ -50,3 +50,19 @@
 
 /* Penanda perubahan ala editor IDE */
 .monaco .max-gutter-added{border-left:3px solid #3fb950!important;margin-left:3px}.monaco .max-gutter-removed{border-left:3px solid #f85149!important;margin-left:3px}.monaco .max-gutter-modified{border-left:3px solid #d29922!important;margin-left:3px}.monaco .max-line-added{background:rgba(46,160,67,.15)}.monaco .max-line-removed{background:rgba(248,81,73,.13)}.monaco .max-line-modified{background:rgba(210,153,34,.13)}.diff-summary{display:flex;gap:7px;font-family:ui-monospace,Consolas,monospace}.diff-summary i{font-style:normal;font-weight:700}.diff-added{color:#3fb950}.diff-removed{color:#f85149}.bottom-panel{resize:vertical;overflow:hidden;min-height:100px;max-height:55vh;scrollbar-width:thin;scrollbar-color:#465264 #10141b}.bottom-content::-webkit-scrollbar,.bottom-tabs::-webkit-scrollbar,.monaco::-webkit-scrollbar,.ai-body::-webkit-scrollbar{width:10px;height:10px}.bottom-content::-webkit-scrollbar-thumb,.bottom-tabs::-webkit-scrollbar-thumb,.monaco::-webkit-scrollbar-thumb,.ai-body::-webkit-scrollbar-thumb{background:#3a4554;border-radius:8px;border:2px solid #10141b}.bottom-content::-webkit-scrollbar-thumb:hover,.bottom-tabs::-webkit-scrollbar-thumb:hover,.monaco::-webkit-scrollbar-thumb:hover,.ai-body::-webkit-scrollbar-thumb:hover{background:#58677a}
+
+/* Panel dokumen: ekspor format kantor dan dokumen */
+.documents-backdrop{z-index:120}
+.documents-modal{width:min(560px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto}
+.documents-modal .router-modal-head strong{display:flex;align-items:center;gap:8px}
+.document-format-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}
+.document-format-grid button{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border:1px solid #3a3445;border-radius:10px;background:#24202e;color:#f8f4ff;cursor:pointer}
+.document-format-grid button:hover{border-color:#ff8bc7;background:#34253b;transform:translateY(-1px)}
+.document-format-grid button span{font-size:12px;font-weight:700}
+.document-format-grid button small{font-size:10px;color:#d0bfd8}
+.document-actions{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+.document-actions button{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #403749;border-radius:7px;padding:8px 10px;background:#292331;color:#f7f1fb;cursor:pointer;font-size:11px}
+.document-actions button.primary{background:#f28abd;color:#271625;border-color:#f28abd}
+.document-note{display:block;color:#a99caf;font-size:11px;line-height:1.6;margin:12px 0}
+.document-success{border:1px solid #347b5b;background:#17372a;color:#b9f6d1;padding:9px;border-radius:7px;font-size:11px;overflow-wrap:anywhere}
+@media(max-width:520px){.document-format-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.documents-modal{padding:14px}.document-actions button{flex:1 1 42%}}
