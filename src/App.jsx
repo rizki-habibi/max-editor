@@ -141,9 +141,12 @@ export default function App(){
  }
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
-  const requestPath=active; const requestCode=files[active]??""; const wantsCoding=/\b(buat|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt);
+  const requestPath=active; const requestCode=files[active]??""; const wantsCoding=/\b(buat|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan|jelaskan|analisis|cek|review|cari|tambahkan fitur)\b/i.test(prompt);
   setAi("");setAiBusy(true);setAiStartedAt(Date.now());setAiElapsed(0);
-  const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];
+  const workspaceIndex=Object.keys(files).sort().map(p=>(p===requestPath?"▶ ":"  ")+p).join("\n");
+  const relatedFiles=Object.entries(files).filter(([p])=>p!==requestPath).slice(0,8).map(([p,c])=>"\n--- FILE: "+p+" ---\n"+String(c).slice(0,2200)).join("\n");
+  const codingInstructions=wantsCoding?"\n\nMODE AGEN CODING MAX EDITOR:\n- Baca konteks file aktif dan daftar file workspace sebelum memberi solusi.\n- Pertahankan gaya, dependensi, API, dan pola proyek yang sudah ada; jangan mengganti file dengan contoh generik atau dokumentasi yang tidak diminta.\n- Untuk perubahan pada file aktif, keluarkan tepat satu blok kode lengkap yang siap menggantikan file aktif. Gunakan bahasa yang sesuai ekstensi file.\n- Jangan menaruh kode file lain ke file aktif. Jika tugas membutuhkan banyak file, jelaskan file tambahan yang dibutuhkan; jangan pura-pura sudah mengubah file yang tidak dapat ditulis.\n- Hindari placeholder, TODO, kode palsu, dan klaim bahwa build/test sudah berhasil tanpa hasil tes nyata.\n- Pertahankan konfigurasi rahasia di environment; jangan meminta atau menampilkan API key.\n- Beri ringkasan singkat sebelum blok kode dan langkah verifikasi setelahnya.":"";
+  const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+requestPath+"\nDaftar file workspace:\n"+workspaceIndex+"\n\nIsi file aktif:\n"+requestCode.slice(0,18000)+relatedFiles+codingInstructions}];
   setAiMessages(msgs);
   try{
    let result,activeModel=routerConfig.model,lastError;
