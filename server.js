@@ -11,7 +11,7 @@ const __dirname=path.dirname(fileURLToPath(import.meta.url));
 app.use(express.json({limit:"10mb"}));
 
 const EDITOR_PASSWORD=process.env.EDITOR_PASSWORD||"";
-const SESSION_SECRET=process.env.EDITOR_SESSION_SECRET||process.env.JWT_SECRET||crypto.randomBytes(32).toString("hex");
+const SESSION_SECRET=process.env.EDITOR_SESSION_SECRET||process.env.JWT_SECRET||(EDITOR_PASSWORD?crypto.createHash("sha256").update("MAX_EDITOR_SESSION_V1:"+EDITOR_PASSWORD).digest("hex"):crypto.randomBytes(32).toString("hex"));
 function signSession(payload){const body=Buffer.from(JSON.stringify(payload)).toString("base64url");const sig=crypto.createHmac("sha256",SESSION_SECRET).update(body).digest("base64url");return body+"."+sig;}
 function readSession(req){
  const cookies=Object.fromEntries((req.headers.cookie||"").split(";").map(v=>v.trim()).filter(Boolean).map(v=>{const i=v.indexOf("=");return [v.slice(0,i),decodeURIComponent(v.slice(i+1))]}));
