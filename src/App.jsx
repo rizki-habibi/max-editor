@@ -66,7 +66,7 @@ export default function App(){
  const [workspace,setWorkspace]=useState(null);
  const [active,setActive]=useState("README.md");
  const [ai,setAi]=useState("");
- const [terminal,setTerminal]=useState(false);
+ const [terminal,setTerminal]=useState(false); const [bottomTab,setBottomTab]=useState("Terminal"); const [buildStatus,setBuildStatus]=useState("Belum dijalankan"); const [problems,setProblems]=useState([]);
  const [saved,setSaved]=useState(true);
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
@@ -185,7 +185,7 @@ export default function App(){
     ws.onclose=()=>{localSocket.current=null;setLocalStatus("Local Agent terputus")};
   }catch(e){setLocalStatus(e.message)}
  }
- function runTerminal(){
+ async function runBuild(){setTerminal(true);setBottomTab("Build");setBuildStatus("Menjalankan npm run build…");setTerminalLines(x=>[...x,"PS MAX> npm run build"]);if(!localSocket.current||localSocket.current.readyState!==WebSocket.OPEN){setBuildStatus("Local Agent belum terhubung");setTerminalLines(x=>[...x,"Build tidak dijalankan: hubungkan Local Agent agar perintah dijalankan di komputer proyek."]);return;}localSocket.current.send(JSON.stringify({type:"exec",command:"npm run build"}));setBuildStatus("Perintah build dikirim ke Local Agent.");}\n function runTerminal(){
   const command=terminalInput.trim();if(!command)return;
   const blocked=/\b(format|del\s+\/s|rd\s+\/s|rmdir\s+\/s|remove-item\s+-recurse|git\s+reset\s+--hard|git\s+clean\s+-fd|rm\s+-rf)\b/i;
   setTerminalLines(x=>[...x,"PS MAX> "+command]);
@@ -213,9 +213,9 @@ export default function App(){
     </aside>
     <main className="editor-area">
       <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
-      <div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor)=>editor.focus()} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection"}}/></div>
-      {terminal&&<div className="terminal"><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-body">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}<div><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="ketik command Windows..." autoFocus/></div></div></div>}
-      <div className="statusbar"><span>Ln 1, Col 1</span><span>{language}</span><span>UTF-8</span><button onClick={()=>setTerminal(!terminal)}><Terminal size={13}/> Terminal</button></div>
+      <div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor)=>editor.focus()} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection",wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:10,horizontalScrollbarSize:10}}}/></div>
+      {terminal&&<section className="bottom-panel"><div className="bottom-tabs"><button className={bottomTab==="Terminal"?"selected":""} onClick={()=>setBottomTab("Terminal")}><Terminal size={13}/> Terminal</button><button className={bottomTab==="Output"?"selected":""} onClick={()=>setBottomTab("Output")}>Output</button><button className={bottomTab==="Problems"?"selected":""} onClick={()=>setBottomTab("Problems")}><AlertTriangle size={13}/> Masalah {problems.length?`(${problems.length})`:""}</button><button className={bottomTab==="Build"?"selected":""} onClick={()=>setBottomTab("Build")}><Play size={13}/> Build</button><span className="bottom-spacer"/><button onClick={()=>setTerminal(false)} title="Tutup panel">×</button></div><div className="bottom-content">{bottomTab==="Build"?<><strong>{buildStatus}</strong><p>Build dijalankan melalui Local Agent pada folder proyek lokal.</p><button className="build-button" onClick={runBuild}><Play size={13}/> Jalankan Build</button></>:bottomTab==="Problems"?<div>{problems.length?problems.map((p,i)=><div key={i}>{p}</div>):"Belum ada hasil pemeriksaan kode. Jalankan Build untuk memeriksa proyek."}</div>:bottomTab==="Output"?terminalLines.map((line,i)=><div key={i}>{line}</div>):<><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-lines">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}</div><div className="terminal-command"><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="Masukkan perintah..." /></div></>}</div></section>}
+      <div className="statusbar"><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
     </main>
     <aside className="ai-panel">
       <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?routerConfig.model.split("/").slice(-1)[0]:"Pilih model"} <ChevronDown size={12}/></button></div>
