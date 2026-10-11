@@ -121,26 +121,27 @@ export default function App(){
  function requestCodingMode(prompt){
   setAi(prompt+"\n\nMode kerja: CODING LANGSUNG. Buat solusi untuk file aktif `"+active+"`. Jika file ini yang harus diubah, balas dengan satu blok kode lengkap berformat ```"+(language==="markdown"?"markdown":language==="javascript"?"javascript":language)+"\n...kode lengkap...\n```. Jangan hanya memberi potongan kode. Sebelum blok, jelaskan singkat apa yang akan diterapkan.");
  }
- function applyCodeProposal(message){
+ function applyCodeProposal(message,targetPath=active){
   const proposal=extractCodeBlock(message);
   if(proposal===null){setCodeApplyStatus("Respons ini tidak memiliki blok kode lengkap untuk diterapkan.");return;}
   if(typingTimer.current)clearInterval(typingTimer.current);
-  setTypingCode(true);setCodeApplyStatus("AI sedang mengetik kode ke "+active+"…");
+  setTypingCode(true);setActive(targetPath);setCodeApplyStatus("AI sedang mengetik kode ke "+targetPath+"…");
   const target=proposal;let index=0;const chunk=18;
-  setFiles(current=>({...current,[active]:""}));setSaved(false);
+  setFiles(current=>({...current,[targetPath]:""}));setSaved(false);
   typingTimer.current=setInterval(()=>{
    index=Math.min(index+chunk,target.length);
    const partial=target.slice(0,index);
-   setFiles(current=>({...current,[active]:partial}));
+   setFiles(current=>({...current,[targetPath]:partial}));
    if(index>=target.length){
     clearInterval(typingTimer.current);typingTimer.current=null;setTypingCode(false);
-    setSaved(false);setCodeApplyStatus("Kode diterapkan ke "+active+". Menyimpan otomatis…");
+    setSaved(false);setCodeApplyStatus("Kode diterapkan ke "+targetPath+". Menyimpan otomatis…");
     setTimeout(()=>setCodeApplyStatus(""),4500);
    }
   },12);
  }
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
+  const requestPath=active; const requestCode=files[active]??""; const wantsCoding=/\b(buat|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt);
   setAi("");setAiBusy(true);setAiStartedAt(Date.now());setAiElapsed(0);
   const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+active+"\nIsi file:\n"+code.slice(0,18000)}];
   setAiMessages(msgs);
@@ -167,9 +168,11 @@ export default function App(){
     setRouterConfig(next);saveRouterConfig(next);
     setRouterStatus("Otomatis beralih ke model aktif: "+activeModel);
     setAiMessages(m=>[...m,{role:"assistant",content:"Berhasil beralih otomatis ke model "+activeModel+" karena model sebelumnya gagal.\\n\\n"+result}]);
+    if(wantsCoding){const proposal=extractCodeBlock(result);if(proposal!==null)applyCodeProposal(result,requestPath)}
     return;
    }
    setAiMessages(m=>[...m,{role:"assistant",content:result}]);
+   if(wantsCoding){const proposal=extractCodeBlock(result);if(proposal!==null){const ext=requestPath.split(".").pop().toLowerCase();const looksWrong=(ext==="js"||ext==="jsx"||ext==="ts"||ext==="tsx")&&(/^\s*<!doctype html>|^\s*<html[\s>]|^\s*#\s/m.test(proposal));if(!looksWrong)applyCodeProposal(result,requestPath);else setCodeApplyStatus("Kode tidak diterapkan otomatis karena formatnya tidak cocok dengan "+requestPath+".");}}
   }catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}]);}
   finally{setAiBusy(false);setAiStartedAt(null)}
 }
