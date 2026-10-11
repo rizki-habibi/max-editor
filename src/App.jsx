@@ -208,6 +208,32 @@ export default function App(){
   }catch(e){setLocalStatus(e.message)}
  }
  async function runBuild(){setTerminal(true);setBottomTab("Build");setBuildStatus("Menjalankan npm run build…");setTerminalLines(x=>[...x,"PS MAX> npm run build"]);if(!localSocket.current||localSocket.current.readyState!==WebSocket.OPEN){setBuildStatus("Local Agent belum terhubung");setTerminalLines(x=>[...x,"Build tidak dijalankan: hubungkan Local Agent agar perintah dijalankan di komputer proyek."]);return;}localSocket.current.send(JSON.stringify({type:"exec",command:"npm run build"}));setBuildStatus("Perintah build dikirim ke Local Agent.");}
+ function autoInstallDependencies(){
+  setTerminal(true);setBottomTab("Terminal");
+  const commands=[];
+  const names=Object.keys(files);
+  if(names.includes("composer.json"))commands.push("composer install");
+  if(names.includes("package.json"))commands.push("npm install");
+  if(names.includes("requirements.txt"))commands.push("python -m pip install -r requirements.txt");
+  if(names.includes("pyproject.toml")&&!names.includes("requirements.txt"))commands.push("python -m pip install .");
+  if(names.includes("go.mod"))commands.push("go mod download");
+  if(names.includes("Cargo.toml"))commands.push("cargo fetch");
+  if(names.includes("Gemfile"))commands.push("bundle install");
+  if(names.includes("pom.xml"))commands.push("mvn dependency:resolve");
+  if(names.includes("build.gradle")||names.includes("build.gradle.kts"))commands.push(names.includes("gradlew")?"./gradlew build":"gradle build");
+  if(!commands.length){setTerminalLines(x=>[...x,"MAX AI: Tidak menemukan manifest dependensi (composer.json, package.json, requirements.txt, go.mod, Cargo.toml, Gemfile, pom.xml, atau build.gradle). Impor folder proyek lengkap dahulu."]);return;}
+  if(!localSocket.current||localSocket.current.readyState!==WebSocket.OPEN){setTerminalLines(x=>[...x,"MAX AI: Perlu menghubungkan Local Agent di komputer proyek sebelum instalasi.","Perintah yang terdeteksi: "+commands.join(" && "),"Buka Integrasi → Local Agent → Hubungkan, lalu klik Instal Dependensi lagi."]);return;}
+  setTerminalLines(x=>[...x,"MAX AI: Mendeteksi paket dari file proyek…","MAX AI: Menjalankan instalasi dependensi: "+commands.join(" && ")]);
+  const runNext=(index)=>{
+   if(index>=commands.length){setTerminalLines(x=>[...x,"MAX AI: Semua perintah instalasi selesai. Periksa kode keluar di atas."]);return;}
+   const command=commands[index];
+   setTerminalLines(x=>[...x,"PS MAX> "+command]);
+   localSocket.current.send(JSON.stringify({type:"exec",command}));
+  };
+  // Send a single platform-compatible shell command chain so output remains ordered.
+  const command=commands.join(" && ");
+  localSocket.current.send(JSON.stringify({type:"exec",command}));
+ }
  function runTerminal(){
   const command=terminalInput.trim();if(!command)return;
   const blocked=/\b(format|del\s+\/s|rd\s+\/s|rmdir\s+\/s|remove-item\s+-recurse|git\s+reset\s+--hard|git\s+clean\s+-fd|rm\s+-rf)\b/i;
@@ -237,7 +263,7 @@ export default function App(){
     <main className="editor-area">
       <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
       <div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor,monaco)=>{editorRef.current=editor;editorRef.current.monaco=monaco;editor.focus();}} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection",wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:10,horizontalScrollbarSize:10}}}/></div>
-      {terminal&&<section className="bottom-panel"><div className="bottom-tabs"><button className={bottomTab==="Terminal"?"selected":""} onClick={()=>setBottomTab("Terminal")}><Terminal size={13}/> Terminal</button><button className={bottomTab==="Output"?"selected":""} onClick={()=>setBottomTab("Output")}>Output</button><button className={bottomTab==="Problems"?"selected":""} onClick={()=>setBottomTab("Problems")}><AlertTriangle size={13}/> Masalah {problems.length?`(${problems.length})`:""}</button><button className={bottomTab==="Build"?"selected":""} onClick={()=>setBottomTab("Build")}><Play size={13}/> Build</button><span className="bottom-spacer"/><button onClick={()=>setTerminal(false)} title="Tutup panel">×</button></div><div className="bottom-content">{bottomTab==="Build"?<><strong>{buildStatus}</strong><p>Build dijalankan melalui Local Agent pada folder proyek lokal.</p><button className="build-button" onClick={runBuild}><Play size={13}/> Jalankan Build</button></>:bottomTab==="Problems"?<div>{problems.length?problems.map((p,i)=><div key={i}>{p}</div>):"Belum ada hasil pemeriksaan kode. Jalankan Build untuk memeriksa proyek."}</div>:bottomTab==="Output"?terminalLines.map((line,i)=><div key={i}>{line}</div>):<><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-lines">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}</div><div className="terminal-command"><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="Masukkan perintah..." /></div></>}</div></section>}
+      {terminal&&<section className="bottom-panel"><div className="bottom-tabs"><button className={bottomTab==="Terminal"?"selected":""} onClick={()=>setBottomTab("Terminal")}><Terminal size={13}/> Terminal</button><button className={bottomTab==="Output"?"selected":""} onClick={()=>setBottomTab("Output")}>Output</button><button className={bottomTab==="Problems"?"selected":""} onClick={()=>setBottomTab("Problems")}><AlertTriangle size={13}/> Masalah {problems.length?`(${problems.length})`:""}</button><button className={bottomTab==="Build"?"selected":""} onClick={()=>setBottomTab("Build")}><Play size={13}/> Build</button><span className="bottom-spacer"/><button onClick={()=>setTerminal(false)} title="Tutup panel">×</button></div><div className="bottom-content">{bottomTab==="Build"?<><strong>{buildStatus}</strong><p>Build dijalankan melalui Local Agent pada folder proyek lokal.</p><button className="build-button" onClick={runBuild}><Play size={13}/> Jalankan Build</button><button className="build-button" onClick={autoInstallDependencies}><PlugZap size={13}/> Instal dependensi otomatis</button><p>MAX AI mendeteksi Composer, npm, Python, Go, Rust, Ruby, dan Java dari manifest proyek. Local Agent menjalankan perintah pada folder proyek yang sedang terhubung.</p></>:bottomTab==="Problems"?<div>{problems.length?problems.map((p,i)=><div key={i}>{p}</div>):"Belum ada hasil pemeriksaan kode. Jalankan Build untuk memeriksa proyek."}</div>:bottomTab==="Output"?terminalLines.map((line,i)=><div key={i}>{line}</div>):<><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-lines">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}</div><div className="terminal-command"><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="Masukkan perintah..." /></div></>}</div></section>}
       <div className="statusbar"><span className="diff-summary"><i className="diff-added">+{changeStats.added}</i> <i className="diff-removed">−{changeStats.removed}</i></span><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
     </main>
     <aside className="ai-panel">
