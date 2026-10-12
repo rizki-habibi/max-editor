@@ -156,7 +156,7 @@ export default function App(){
    if(result===undefined){
     const errorText=String(lastError?.message||lastError||"");
     const shouldFailover=/403|401|429|500|502|503|504|account_suspended|suspended|rate.?limit|quota|overload|temporar|unavailable|no credentials/i.test(errorText);
-    if(!shouldFailover)throw lastError;
+    if(!shouldFailover||routerConfig.selectionType==="combo")throw lastError;
     setAiMessages(m=>[...m,{role:"assistant",content:"Model "+(routerConfig.model||"(belum dipilih)")+" gagal. Mendeteksi model alternatif dan mencoba otomatis…"}]);
     const models=await listRouterModels(routerConfig);
     const candidates=models.filter(m=>m?.id&&m.id!==routerConfig.model);
