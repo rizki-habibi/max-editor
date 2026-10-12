@@ -31,6 +31,10 @@ export async function listRouterModels() {
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { data = null; }
+  if (response.status === 401) {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("max-editor-auth-expired"));
+    throw new Error("Sesi MAX Editor berakhir. Silakan masuk kembali untuk memuat model.");
+  }
   if (!response.ok) throw new Error(data?.error?.message || data?.message || data?.error || ("MAX Router HTTP " + response.status));
   return Array.isArray(data?.data) ? data.data : [];
 }
