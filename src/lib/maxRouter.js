@@ -29,7 +29,7 @@ export function saveRouterConfig(config = {}) {
 }
 
 export async function listRouterModels() {
-  const response = await fetch("/api/router/models", { credentials: "same-origin" });
+  const response = await fetch("/api/router/models", { credentials: "same-origin", cache: "no-store" });
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { data = null; }
@@ -42,7 +42,7 @@ export async function listRouterModels() {
 }
 
 export async function listRouterCombos() {
-  const response = await fetch("/api/router/combos", { credentials: "same-origin" });
+  const response = await fetch("/api/router/combos", { credentials: "same-origin", cache: "no-store" });
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { data = null; }
