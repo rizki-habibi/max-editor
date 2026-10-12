@@ -82,7 +82,27 @@ app.get("/api/editor/workspace",requireAuth,async(req,res)=>{try{const uid=userI
  const defaultReadme=files.find(f=>f.path==="README.md" && /^# MAX Editor\s+Editor coding online berbasis browser\.?\s*$/m.test(f.content));
  if(defaultReadme){await pool.query("DELETE FROM editor_files WHERE workspace_id=$1 AND path=$2",[w.id,"README.md"]);files=files.filter(f=>f.path!=="README.md");}
  if(!files.length){const initial=[["src/App.js","export default function hello() {\n  console.log('Hello from MAX Editor');\n}\n"],["src/index.js","import hello from './App.js';\n\nhello();\n"]];for(const [p,c] of initial) await pool.query("INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4)",[w.id,p,c,p.endsWith(".md")?"markdown":"javascript"]);return res.json({workspace:w,files:initial.map(([path,content])=>({path,content,language:path.endsWith(".md")?"markdown":"javascript"}))});}res.json({workspace:w,files});}catch(e){res.status(500).json({error:"Gagal memuat workspace PostgreSQL.",detail:e.message});}});
-app.put("/api/editor/files",requireAuth,async(req,res)=>{try{const uid=userId(req),{workspaceId,files}=req.body||{};if(!workspaceId||!Array.isArray(files))return res.status(400).json({error:"workspaceId dan files wajib diisi."});const owner=await pool.query("SELECT id FROM editor_workspaces WHERE id=$1 AND owner_id=$2",[workspaceId,uid]);if(!owner.rowCount)return res.status(403).json({error:"Workspace tidak valid."});await pool.query("BEGIN");for(const f of files){await pool.query("INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_id,path) DO UPDATE SET content=EXCLUDED.content,language=EXCLUDED.language,updated_at=NOW()",[workspaceId,String(f.path),String(f.content??""),String(f.language||"javascript")]);}await pool.query("COMMIT");res.json({ok:true,count:files.length,database:"postgres"});}catch(e){try{await pool.query("ROLLBACK")}catch{}res.status(500).json({error:"Gagal menyimpan file PostgreSQL.",detail:e.message});}});
+app.put("/api/editor/files",requireAuth,async(req,res)=>{
+ let client;
+ try{
+  const uid=userId(req),{workspaceId,files}=req.body||{};
+  if(!workspaceId||!Array.isArray(files))return res.status(400).json({error:"workspaceId dan files wajib diisi."});
+  const owner=await pool.query("SELECT id FROM editor_workspaces WHERE id=$1 AND owner_id=$2",[workspaceId,uid]);
+  if(!owner.rowCount)return res.status(403).json({error:"Workspace tidak valid."});
+  client=await pool.connect();
+  await client.query("BEGIN");
+  for(const f of files){
+   await client.query("INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_id,path) DO UPDATE SET content=EXCLUDED.content,language=EXCLUDED.language,updated_at=NOW()",[workspaceId,String(f.path),String(f.content??""),String(f.language||"javascript")]);
+  }
+  await client.query("COMMIT");
+  return res.json({ok:true,count:files.length,database:"postgres"});
+ }catch(e){
+  if(client){try{await client.query("ROLLBACK")}catch{}}
+  return res.status(500).json({error:"Gagal menyimpan file PostgreSQL.",detail:e.message});
+ }finally{
+  client?.release();
+ }
+});
 app.use(express.static(path.join(__dirname,"dist")));
 app.get("/{*splat}",(req,res)=>res.sendFile(path.join(__dirname,"dist","index.html")));
 init().then(()=>app.listen(PORT,"0.0.0.0",()=>console.log("[MAX Editor] PostgreSQL + web listening on "+PORT))).catch(e=>{console.error(e);process.exit(1);});
