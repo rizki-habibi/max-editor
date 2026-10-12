@@ -79,7 +79,24 @@ function CloudAuth({onSession}){
   <div className="comic-note">BANGUN<br/><strong>DUNIAMU</strong></div>
  </div>
 }
-export default function App(){
+export default function ComboVisual({routerConfig,routerCombos,routerModels,setModelDetail,setRouterConfig,saveRouterConfig,setRouterStatus}) {
+ const selectedCombo=routerCombos.find(item=>item.name===routerConfig.model);
+ const comboModels=selectedCombo?.models||[];
+ return <section className="combo-visual" aria-label="Susunan model combo">
+  <div className="combo-visual-head"><span><GitBranch size={13}/> Alur model combo</span><strong>{comboModels.length} model</strong></div>
+  {comboModels.length>0 ? <ol className="combo-model-list">{comboModels.map((model,index)=>{
+   const modelName=typeof model==="string"?model:(model?.id||model?.name||String(model));
+   return <li key={modelName+"-"+index} className={routerConfig.selectionType==="individual"&&routerConfig.model===modelName?"is-primary":""}>
+    <button type="button" className="combo-model-pick" onClick={()=>{const detail=routerModels.find(item=>item.id===modelName)||{id:modelName};setModelDetail(detail);}} title={"Lihat detail "+modelName}>
+     <span className="combo-model-index">{String(index+1).padStart(2,"0")}</span><span className="combo-model-name" title={modelName}>{modelName}</span><span className="combo-model-open"><Sparkles size={12}/></span>
+    </button>
+    <button type="button" className="combo-model-primary" onClick={()=>{const next={...routerConfig,selectionType:"individual",model:modelName};setRouterConfig(next);saveRouterConfig(next);setRouterStatus("Model utama diubah ke "+modelName);}} title="Jadikan model utama" aria-label={"Jadikan "+modelName+" model utama"}><CheckCircle2 size={13}/></button>
+   </li>;
+  })}</ol> : <div className="combo-empty-state"><Sparkles size={16}/><span>Belum ada susunan model untuk combo ini. Sinkronkan ulang dari MAX Router.</span></div>}
+ </section>;
+}
+
+function App(){
  const [files,setFiles]=useState({}); const [originalFiles,setOriginalFiles]=useState({}); const editorRef=useRef(null); const decorationsRef=useRef([]); const aiBodyRef=useRef(null);
  const [documentsOpen,setDocumentsOpen]=useState(false); const [leftPanelOpen,setLeftPanelOpen]=useState(true); const [rightPanelOpen,setRightPanelOpen]=useState(true); const [aiMode,setAiMode]=useState("Auto"); const [aiProfile,setAiProfile]=useState("Default"); const [autopilot,setAutopilot]=useState(true); const [composerMenu,setComposerMenu]=useState(false);
  const [session,setSession]=useState(null);
@@ -385,7 +402,7 @@ export default function App(){
        <button className={routerConfig.selectionType==="combo"?"selected":""} onClick={()=>chooseRouterMode("combo")}>Combo</button>
      </div>
      {routerConfig.selectionType==="combo" ? <label>Pilih combo dari MAX Router<select value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value,selectionType:"combo"}))}><option value="">Pilih combo</option>{routerCombos.map(combo=><option key={combo.id||combo.name} value={combo.name}>{combo.name} · {(combo.models||[]).length} model</option>)}</select></label> : <label>Pilih model AI<select value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value,selectionType:"individual"}))}><option value="">Pilih model dari MAX Router</option>{routerModels.map(m=><option key={m.id} value={m.id}>{m.id}</option>)}</select></label>}
-     {routerConfig.selectionType==="combo"&&(()=>{const selectedCombo=routerCombos.find(x=>x.name===routerConfig.model);const comboModels=selectedCombo?.models||[];return <section className="combo-visual" aria-label="Susunan model combo"><div className="combo-visual-head"><span><GitBranch size={13}/> Alur model combo</span><strong>{comboModels.length} model</strong></div>{comboModels.length?<ol className="combo-model-list">{comboModels.map((model,index)=>{const modelName=typeof model==="string"?model:(model?.id||model?.name||String(model));return <li key={modelName+"-"+index} className={routerConfig.selectionType==="individual"&&routerConfig.model===modelName?"is-primary":""}><button type="button" className="combo-model-pick" onClick={()=>{const model=routerModels.find(m=>m.id===modelName)||{id:modelName};setModelDetail(model);}} title={"Lihat detail "+modelName}><span className="combo-model-index">{String(index+1).padStart(2,"0")}</span><span className="combo-model-name" title={modelName}>{modelName}</span><span className="combo-model-open"><Sparkles size={12}/></span></button><button type="button" className="combo-model-primary" onClick={()=>{const next={...routerConfig,selectionType:"individual",model:modelName};setRouterConfig(next);saveRouterConfig(next);setRouterStatus("Model utama diubah ke "+modelName);}} title="Jadikan model utama" aria-label={"Jadikan "+modelName+" model utama"><CheckCircle2 size={13}/></button></li>})}</ol>:<div className="combo-empty-state"><Sparkles size={16}/><span>Belum ada susunan model untuk combo ini. Sinkronkan ulang dari MAX Router.</span></div>}</section>})()}
+     {routerConfig.selectionType==="combo"&&<ComboVisual routerConfig={routerConfig} routerCombos={routerCombos} routerModels={routerModels} setModelDetail={setModelDetail} setRouterConfig={setRouterConfig} saveRouterConfig={saveRouterConfig} setRouterStatus={setRouterStatus}/> }
      <p>Individu memakai model terpilih. Combo menjalankan strategi yang sudah diatur di MAX Router.</p>
      <div className="router-model-stats">
        <div><span>Model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
