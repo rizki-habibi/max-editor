@@ -139,8 +139,8 @@ export default function App(){
     if(value.trim()==="\\n"){remove.push(node);continue;}
     // Normalize escaped newlines only in user-facing messages, not code/editor text.
     const parent=node.parentElement;
-    if(parent?.closest(".ai-message,.update-notice-copy,.auth-message,.git-error,.router-status-box,.document-success")&&value.includes("\\\\n")){
-     node.nodeValue=value.replace(/\\\\n/g,"\\n");
+    if(parent?.closest(".ai-message,.update-notice-copy,.auth-message,.git-error,.router-status-box,.document-success")&&value.includes("\\n")){
+     node.nodeValue=value.replace(/\\n/g,"\n");
     }
    }
    for(const textNode of remove)textNode.parentNode?.removeChild(textNode);
