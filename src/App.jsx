@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
 import {FileCode2,FileText,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot} from "lucide-react";
 import {loadWorkspace,saveFiles} from "./lib/editorDb";
-import {chatWithRouter,getRouterConfig,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
+import {chatWithRouter,getRouterConfig,listRouterCombos,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
 import DocumentsPanel from "./components/DocumentsPanel";
 
@@ -65,7 +65,7 @@ export default function App(){
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
  const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
- const [routerModels,setRouterModels]=useState([]); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0); const [typingCode,setTypingCode]=useState(false); const [codeApplyStatus,setCodeApplyStatus]=useState(""); const typingTimer=useRef(null);
+ const [routerModels,setRouterModels]=useState([]); const [routerCombos,setRouterCombos]=useState([]); const [comboError,setComboError]=useState(""); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0); const [typingCode,setTypingCode]=useState(false); const [codeApplyStatus,setCodeApplyStatus]=useState(""); const typingTimer=useRef(null);
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
  const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
@@ -84,7 +84,7 @@ export default function App(){
    setRouterModels(models);
    const counts=models.reduce((a,m)=>{a[classifyModelPricing(m)]++;return a},{free:0,paid:0,unknown:0});
    setRouterStats({total:models.length,...counts,syncedAt:new Date().toLocaleTimeString("id-ID"),loading:false,error:""});
-   if(models.length && !models.some(m=>m.id===routerConfig.model)){
+   if(routerConfig.selectionType!=="combo" && models.length && !models.some(m=>m.id===routerConfig.model)){
     const preferred=models.find(m=>classifyModelPricing(m)==="free")||models[0];
     setRouterConfig(x=>({...x,model:preferred.id}));
    }
@@ -186,9 +186,11 @@ export default function App(){
   }catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}]);}
   finally{setAiBusy(false);setAiStartedAt(null)}
 }
- async function testRouter(){setRouterStatus("Memeriksa...");const models=await syncRouterModels();if(models.length)setRouterStatus("Terhubung · "+models.length+" model");else setRouterStatus(routerStats.error||"Tidak ada model aktif.")}
- function saveRouterLocal(){saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus("Konfigurasi tersimpan")}
- useEffect(()=>{if(!session)return;syncRouterModels();const timer=setInterval(syncRouterModels,60000);return()=>clearInterval(timer)},[session]); useEffect(()=>{if(!aiBusy||!aiStartedAt)return;const timer=setInterval(()=>setAiElapsed(Math.floor((Date.now()-aiStartedAt)/1000)),250);return()=>clearInterval(timer)},[aiBusy,aiStartedAt]);
+ async function syncRouterCombos(){setComboError("");try{const combos=await listRouterCombos();setRouterCombos(combos);return combos}catch(e){setComboError(e.message||"Gagal menyinkronkan combo.");return []}}
+ async function testRouter(){setRouterStatus("Memeriksa...");const [models,combos]=await Promise.all([syncRouterModels(),syncRouterCombos()]);if(models.length||combos.length)setRouterStatus("Terhubung · "+models.length+" model · "+combos.length+" combo");else setRouterStatus(routerStats.error||comboError||"Tidak ada model atau combo aktif.")}
+ function saveRouterLocal(){if(!routerConfig.model){setRouterStatus("Pilih model atau combo terlebih dahulu.");return;}saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus((routerConfig.selectionType==="combo"?"Combo ":"Model ")+routerConfig.model+" siap digunakan.")}
+ function chooseRouterMode(mode){setRouterConfig(current=>{if(mode==="combo"){const combo=routerCombos.find(x=>x.name===current.model)||routerCombos[0];return {...current,selectionType:"combo",model:combo?.name||""};}const model=routerModels.find(x=>x.id===current.model)||routerModels[0];return {...current,selectionType:"individual",model:model?.id||""};});}
+ useEffect(()=>{if(!session)return;syncRouterModels();syncRouterCombos();const timer=setInterval(()=>{syncRouterModels();syncRouterCombos()},60000);return()=>clearInterval(timer)},[session]); useEffect(()=>{if(!aiBusy||!aiStartedAt)return;const timer=setInterval(()=>setAiElapsed(Math.floor((Date.now()-aiStartedAt)/1000)),250);return()=>clearInterval(timer)},[aiBusy,aiStartedAt]);
  function connectLocal(){
   if(localSocket.current?.readyState===WebSocket.OPEN){setLocalStatus("Local Agent terhubung");return}
   try{
@@ -260,26 +262,31 @@ export default function App(){
       <div className="statusbar"><span className="diff-summary"><i className="diff-added">+{changeStats.added}</i> <i className="diff-removed">−{changeStats.removed}</i></span><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
     </main>
     <aside className="ai-panel">
-      <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?routerConfig.model.split("/").slice(-1)[0]:"Pilih model"} <ChevronDown size={12}/></button></div>
+      <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?((routerConfig.selectionType==="combo"?"Combo · ":"")+routerConfig.model.split("/").slice(-1)[0]):"Pilih model"} <ChevronDown size={12}/></button></div>
       <div className="ai-body">{aiBusy&&<div className="ai-working"><span className="ai-spinner"></span><div><strong>MAX AI sedang berpikir…</strong><small>{aiElapsed<10?"Mengirim permintaan dan menunggu model":aiElapsed<35?"Menganalisis konteks kode":aiElapsed<90?"Menyusun respons atau perubahan kode":"Respons lebih lama dari biasanya"} · {Math.floor(aiElapsed/60)}:{String(aiElapsed%60).padStart(2,"0")}</small><div className="ai-progress"><i style={{width:Math.min(96,12+aiElapsed*1.2)+"%"}}/></div></div></div>}{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>Asisten Kode AI</h3><p>Analisis file, cari kesalahan, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>requestCodingMode("Perbaiki dan optimalkan file aktif ini")}>Ngoding langsung</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div>{m.role==="assistant"&&(extractCodeBlock(m.content)!==null||extractFileProposals(m.content).length>0)&&<button className="apply-code-button" disabled={typingCode} onClick={()=>applyCodeProposal(m.content)}>{typingCode?"AI sedang mengetik…":"Terapkan kode ke editor"}</button>}</div>)}</div>}</div>
       {codeApplyStatus&&<div className="code-apply-status"><span className={typingCode?"typing-cursor":""}></span>{codeApplyStatus}</div>}<div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan sesuatu kepada MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
-      <div className="provider">MAX Router · {routerConfig.model||"Pilih model"} · {routerModels.length} model</div>
+      <div className="provider">MAX Router · {routerConfig.selectionType==="combo"?"Combo":"Individu"} · {routerConfig.model||"Pilih model"}</div>
     </aside>
    </div>
    {routerOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setRouterOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>MAX Router</strong><button onClick={()=>setRouterOpen(false)}><X size={18}/></button></div>
-     <p>Hubungkan editor ke API yang kompatibel dengan OpenAI melalui Max Router.</p>
-     <label>Pilih model AI<select value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value}))}><option value="">Pilih model dari MAX Router</option>{routerModels.map(m=><option key={m.id} value={m.id}>{m.id}</option>)}</select></label>
-     <p>Daftar model diambil langsung dari MAX Router. API key dikelola di server Railway.</p>
+     <p>Model dan combo disinkronkan langsung dari MAX Router.</p>
+     <div className="router-mode-toggle" role="group" aria-label="Mode pemilihan model">
+       <button className={routerConfig.selectionType!=="combo"?"selected":""} onClick={()=>chooseRouterMode("individual")}>Individu</button>
+       <button className={routerConfig.selectionType==="combo"?"selected":""} onClick={()=>chooseRouterMode("combo")}>Combo</button>
+     </div>
+     {routerConfig.selectionType==="combo" ? <label>Pilih combo dari MAX Router<select value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value,selectionType:"combo"}))}><option value="">Pilih combo</option>{routerCombos.map(combo=><option key={combo.id||combo.name} value={combo.name}>{combo.name} · {(combo.models||[]).length} model</option>)}</select></label> : <label>Pilih model AI<select value={routerConfig.model} onChange={e=>setRouterConfig(x=>({...x,model:e.target.value,selectionType:"individual"}))}><option value="">Pilih model dari MAX Router</option>{routerModels.map(m=><option key={m.id} value={m.id}>{m.id}</option>)}</select></label>}
+     {routerConfig.selectionType==="combo"&&<div className="router-status-box">{routerCombos.find(x=>x.name===routerConfig.model)?("Urutan model: "+(routerCombos.find(x=>x.name===routerConfig.model).models||[]).join(" → ")):"Combo belum dipilih. Buat combo di MAX Router, lalu sinkronkan."}</div>}
+     <p>Individu memakai model terpilih. Combo menjalankan strategi yang sudah diatur di MAX Router.</p>
      <div className="router-model-stats">
-       <div><span>Jumlah model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
+       <div><span>Model</span><strong>{routerStats.loading?"…":routerStats.total}</strong></div>
        <div><span>Gratis</span><strong className="free">{routerStats.loading?"…":routerStats.free}</strong></div>
        <div><span>Berbayar</span><strong className="paid">{routerStats.loading?"…":routerStats.paid}</strong></div>
-       <div><span>Harga tidak diketahui</span><strong>{routerStats.loading?"…":routerStats.unknown}</strong></div>
+       <div><span>Combo</span><strong>{routerCombos.length}</strong></div>
      </div>
-     <div className="router-sync-line">{routerStats.syncedAt?"Sinkron terakhir "+routerStats.syncedAt:"Belum disinkronkan"}{routerStats.error?" · "+routerStats.error:""}</div>
-     <div className="router-status-box">{routerStatus||"Daftar model akan disinkronkan otomatis dari Max Router."}</div>
-     <div><button onClick={syncRouterModels} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkronkan model</button><button className="primary" onClick={saveRouterLocal}>Simpan</button></div>
+     <div className="router-sync-line">{routerStats.syncedAt?"Sinkron model "+routerStats.syncedAt:"Model belum disinkronkan"}{comboError?" · "+comboError:routerStats.error?" · "+routerStats.error:""}</div>
+     <div className="router-status-box">{routerStatus||"Pilihan disimpan dan digunakan untuk permintaan MAX AI berikutnya."}</div>
+     <div><button onClick={testRouter} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkronkan model & combo</button><button className="primary" onClick={saveRouterLocal}>Simpan pilihan</button></div>
    </div></div>}
    {documentsOpen&&<DocumentsPanel files={files} active={active} code={code} onClose={()=>setDocumentsOpen(false)} onCreate={(path,content)=>{setFiles(f=>({...f,[path]:content}));setOriginalFiles(f=>({...f,[path]:content}));setActive(path);setSaved(false);setSyncState(x=>({...x,status:"File dokumen baru dibuat"}));}}/>}
    {integrationsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setIntegrationsOpen(false)}}><div className="router-modal">
