@@ -71,7 +71,7 @@ wss.on("connection",(socket,request)=>{
     if(!actions){socket.send(JSON.stringify({type:"result",code:126,stdout:"",stderr:"Perintah tidak diizinkan oleh MAX Local Agent."}));return;}
     const cwd=typeof msg.cwd==="string"&&msg.cwd.trim()?path.resolve(msg.cwd):process.cwd();
     const result=await runAllowed(actions,cwd);
-    if(socket.readyState===socket.OPEN)socket.send(JSON.stringify({type:"result",...result}));
+    if(socket.readyState===1)socket.send(JSON.stringify({type:"result",...result}));
   });
 });
 server.listen(PORT,"127.0.0.1",()=>console.log("MAX Editor Local Agent: http://127.0.0.1:"+PORT));
