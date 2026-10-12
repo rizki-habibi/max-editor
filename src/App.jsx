@@ -95,6 +95,46 @@ export default function App(){
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
  const deployedVersion=useRef(null);
+ const latestWorkflowRun=useRef(null);
+ const [updateNotice,setUpdateNotice]=useState(null);
+ const notifyUpdate=(kind,title,message)=>{
+  setUpdateNotice({kind,title,message,id:Date.now()});
+  window.clearTimeout(window.__maxEditorNoticeTimer);
+  window.__maxEditorNoticeTimer=window.setTimeout(()=>setUpdateNotice(null),9000);
+ };
+ useEffect(()=>{
+  const onError=(event)=>notifyUpdate("error","Kesalahan aplikasi",event?.message||"Terjadi kesalahan JavaScript.");
+  const onRejection=(event)=>notifyUpdate("error","Proses gagal",String(event?.reason?.message||event?.reason||"Permintaan asynchronous gagal."));
+  window.addEventListener("error",onError);
+  window.addEventListener("unhandledrejection",onRejection);
+  return()=>{window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onRejection)};
+ },[]);
+ useEffect(()=>{
+  let stopped=false;
+  const checkWorkflow=async()=>{
+   try{
+    const response=await fetch("https://api.github.com/repos/rizki-habibi/max-editor/actions/runs?per_page=1",{cache:"no-store"});
+    if(!response.ok)return;
+    const data=await response.json();
+    const run=data.workflow_runs?.[0];
+    if(!run||stopped)return;
+    if(latestWorkflowRun.current===null){latestWorkflowRun.current=run.id;return;}
+    if(run.id!==latestWorkflowRun.current){
+     latestWorkflowRun.current=run.id;
+     const branch=run.head_branch||"main";
+     if(run.status!=="completed")notifyUpdate("pending","Pembaruan sedang diperiksa",`Commit ${run.head_sha?.slice(0,7)||""} sedang diuji oleh GitHub Actions (${branch}).`);
+     else if(run.conclusion==="success")notifyUpdate("success","Pembaruan berhasil diuji",`Pemeriksaan build berhasil untuk ${branch}. Menunggu deployment aplikasi selesai.`);
+     else notifyUpdate("error","Pembaruan terdeteksi bermasalah",`Pemeriksaan build berstatus ${run.conclusion||run.status}. Buka GitHub Actions untuk melihat log error.`);
+    }else if(run.status==="completed"&&run.conclusion!=="success"&&latestWorkflowRun.current===run.id){
+     // A failed latest run is surfaced when a new run first appears, avoiding repeated alerts.
+    }
+   }catch{}
+  };
+  checkWorkflow();
+  const timer=setInterval(checkWorkflow,60000);
+  return()=>{stopped=true;clearInterval(timer)};
+ },[]);
+
  useEffect(()=>{
   let stopped=false;
   const checkForDeployment=async()=>{
@@ -104,7 +144,7 @@ export default function App(){
     const data=await response.json();
     if(stopped||!data?.version)return;
     if(deployedVersion.current===null){deployedVersion.current=data.version;return;}
-    if(data.version!==deployedVersion.current&&saved) window.location.reload();
+    if(data.version!==deployedVersion.current&&saved){notifyUpdate("success","Versi baru tersedia","MAX Editor akan dimuat ulang otomatis.");window.setTimeout(()=>window.location.reload(),1800);}
    }catch{}
   };
   checkForDeployment();
@@ -336,6 +376,7 @@ export default function App(){
       <div className="provider">MAX Router · {routerConfig.selectionType==="combo"?"Combo":"Individu"} · {routerConfig.model||"Pilih model"}</div>
     </aside>
    </div>
+   {updateNotice&&<div className={"update-notice "+updateNotice.kind} role="status" aria-live="polite"><div className="update-notice-icon">{updateNotice.kind==="error"?<AlertTriangle size={18}/>:updateNotice.kind==="pending"?<RefreshCw size={18}/>:<CheckCircle2 size={18}/>}</div><div className="update-notice-copy"><strong>{updateNotice.title}</strong><span>{updateNotice.message}</span>{updateNotice.kind==="error"&&<a href="https://github.com/rizki-habibi/max-editor/actions" target="_blank" rel="noreferrer">Lihat log pemeriksaan <GitBranch size={12}/></a>}</div><button type="button" aria-label="Tutup notifikasi" onClick={()=>setUpdateNotice(null)}><X size={15}/></button></div>}
    {modelDetail&&<div className="modal-backdrop model-detail-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setModelDetail(null)}}><section className="model-detail-modal" role="dialog" aria-modal="true" aria-label="Detail model"><header className="model-detail-head"><div className="model-detail-symbol"><Sparkles size={20}/></div><div className="model-detail-title"><strong>Detail kemampuan model</strong><span title={modelDetail.id}>{modelDetail.id}</span></div><button type="button" onClick={()=>setModelDetail(null)} aria-label="Tutup detail"><X size={18}/></button></header><p className="model-detail-note">Indikator berikut adalah perkiraan berdasarkan metadata model yang tersedia. Dukungan sebenarnya mengikuti kemampuan penyedia dan endpoint MAX Router.</p><div className="model-capability-grid">{(()=>{const id=String(modelDetail.id||"").toLowerCase();const vision=!!(modelDetail.vision||modelDetail.capabilities?.vision||/vision|image|gemini|gpt-4o|claude-3|pixtral|llava/.test(id));const video=!!(modelDetail.video||modelDetail.capabilities?.video||/veo|sora|video/.test(id));const audio=!!(modelDetail.audio||modelDetail.capabilities?.audio||/audio|speech|tts|whisper|realtime/.test(id));const code=!!(modelDetail.code||modelDetail.capabilities?.code||/coder|code|devstral|qwen.*3|deepseek|claude|gpt|gemini/.test(id));const capabilities=[{name:"Teks & obrolan",ok:true,Icon:MessageSquare},{name:"Pemrograman",ok:code,Icon:Code2},{name:"Gambar / visi",ok:vision,Icon:FileImage},{name:"Video",ok:video,Icon:Play},{name:"Audio / suara",ok:audio,Icon:PlugZap}];return capabilities.map(cap=><div key={cap.name} className={"model-capability "+(cap.ok?"supported":"unknown")}><cap.Icon size={17}/><span>{cap.name}</span><strong>{cap.ok?"Terindikasi":"Belum terverifikasi"}</strong></div>)})()}</div><div className="model-detail-actions"><button type="button" onClick={()=>{const next={...routerConfig,selectionType:"individual",model:modelDetail.id};setRouterConfig(next);saveRouterConfig(next);setRouterStatus("Model utama diubah ke "+modelDetail.id);setModelDetail(null);setRouterOpen(false)}}><CheckCircle2 size={15}/> Jadikan model utama</button><button type="button" className="model-detail-secondary" onClick={()=>{setRouterConfig(x=>({...x,selectionType:"individual",model:modelDetail.id}));setModelDetail(null)}}>Pilih untuk digunakan</button></div></section></div>}\n   {routerOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setRouterOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>MAX Router</strong><button onClick={()=>setRouterOpen(false)}><X size={18}/></button></div>
      <p>Model dan combo disinkronkan langsung dari MAX Router.</p>
