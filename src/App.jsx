@@ -127,7 +127,7 @@ export default function App(){
   return()=>{window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onRejection)};
  },[]);
  useEffect(()=>{
-  const root=document.getElementById("root");
+  const root=document.body;
   if(!root)return;
   const cleanVisibleEscapes=()=>{
    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
