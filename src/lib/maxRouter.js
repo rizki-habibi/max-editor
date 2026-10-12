@@ -8,15 +8,17 @@ export function getRouterConfig() {
       baseUrl: MAX_ROUTER_BASE_URL,
       apiKey: "server-managed",
       model: typeof saved.model === "string" ? saved.model : DEFAULT_MODEL,
+      selectionType: saved.selectionType === "combo" ? "combo" : "individual",
     };
   } catch {
-    return { baseUrl: MAX_ROUTER_BASE_URL, apiKey: "server-managed", model: DEFAULT_MODEL };
+    return { baseUrl: MAX_ROUTER_BASE_URL, apiKey: "server-managed", model: DEFAULT_MODEL, selectionType: "individual" };
   }
 }
 
 export function saveRouterConfig(config = {}) {
   const next = {
     model: typeof config.model === "string" ? config.model.trim() : DEFAULT_MODEL,
+    selectionType: config.selectionType === "combo" ? "combo" : "individual",
   };
   try {
     localStorage.setItem("max-editor.router", JSON.stringify(next));
@@ -37,6 +39,19 @@ export async function listRouterModels() {
   }
   if (!response.ok) throw new Error(data?.error?.message || data?.message || data?.error || ("MAX Router HTTP " + response.status));
   return Array.isArray(data?.data) ? data.data : [];
+}
+
+export async function listRouterCombos() {
+  const response = await fetch("/api/router/combos", { credentials: "same-origin" });
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = null; }
+  if (response.status === 401) {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("max-editor-auth-expired"));
+    throw new Error("Sesi MAX Editor berakhir. Silakan masuk kembali untuk memuat combo.");
+  }
+  if (!response.ok) throw new Error(data?.error?.message || data?.message || data?.error || ("MAX Router HTTP " + response.status));
+  return Array.isArray(data?.combos) ? data.combos : Array.isArray(data?.data) ? data.data : [];
 }
 
 export async function chatWithRouter(config, messages) {
