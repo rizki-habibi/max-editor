@@ -35,3 +35,16 @@ jobs:
           test -f src/lib/supabase.js
           test -f local-agent/server.js
           test -f .github/workflows/ci.yml
+          test -f scripts/check-visible-escapes.mjs
+
+      - name: Detect visible literal newline artifacts
+        run: node scripts/check-visible-escapes.mjs
+
+      - name: Production HTTP smoke test
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -e
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 5 --max-time 30 "https://max-editor-production.up.railway.app/" -o /tmp/max-editor.html
+          grep -qi "MAX Editor" /tmp/max-editor.html
+          echo "Production endpoint responds and serves the MAX Editor page."
