@@ -133,3 +133,40 @@
 .multi-editor-pane .monaco-editor,.multi-editor-pane .overflow-guard{max-width:100%}
 .multi-pane-empty{display:grid;place-items:center;flex:1;color:#747681;font-size:11px;background:#17181d}
 @media(max-width:760px){.multi-editor-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(4,minmax(170px,1fr));overflow:auto}.multi-editor-pane{min-height:170px}.pane-toggle{font-size:9px!important;padding:0 5px!important}}
+
+
+/* Panel IDE yang bisa disembunyikan untuk memaksimalkan ruang kerja */
+.panel-control{display:inline-flex!important;align-items:center;justify-content:center;width:29px;height:29px;padding:5px!important;border:1px solid #2b2e38!important;border-radius:7px!important;background:#171920!important;color:#c4c6d1!important;cursor:pointer}
+.panel-control:hover{background:#292332!important;border-color:#775a83!important;color:#f3d9ff!important}
+.brand .panel-control{margin-right:2px}
+.workspace.left-panel-closed .sidebar{display:none!important}
+.workspace.right-panel-closed .ai-panel{display:none!important}
+.workspace.left-panel-closed .editor-area{border-left:0}
+.workspace.right-panel-closed .editor-area{border-right:0}
+.topbar .panel-control{flex:0 0 auto}
+.ai-head-actions button[aria-label="Tutup panel MAX AI"]{width:25px;height:25px;display:grid;place-items:center;border:1px solid #34303b;border-radius:6px;color:#c6b8cb}
+@media(max-width:900px){.workspace.right-panel-open .ai-panel{display:flex}.workspace.right-panel-closed .ai-panel{display:none!important}}
+@media(max-width:520px){.workspace.right-panel-open .ai-panel{display:flex;position:fixed;z-index:80;right:0;top:46px;bottom:24px;width:min(100vw,360px);min-width:0;box-shadow:-18px 0 45px rgba(0,0,0,.4)}.workspace.right-panel-closed .ai-panel{display:none!important}.workspace.left-panel-open .sidebar{position:fixed;z-index:70;left:0;top:46px;bottom:24px;width:min(78vw,260px);box-shadow:18px 0 45px rgba(0,0,0,.35)}}
+.ai-composer{position:relative}
+.ai-input{display:block;padding:8px 8px 44px;min-height:118px;border-radius:14px}
+.ai-input textarea{display:block;width:100%;height:58px;min-height:52px;max-height:115px;padding:4px 5px 8px;resize:vertical;font:12px/1.55 Inter,system-ui,sans-serif}
+.ai-composer-actions{position:absolute;right:7px;top:7px;display:flex;align-items:center;gap:4px}
+.ai-composer-actions .ai-send{width:28px;height:28px;display:grid;place-items:center;border-radius:9px}
+.ai-composer-toolbar{position:absolute;left:7px;right:7px;bottom:6px;display:flex;align-items:center;gap:3px;min-width:0;height:29px;color:#a9a5b2}
+.ai-composer-toolbar>button{width:27px;height:27px;flex:0 0 27px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#aaa6b4;cursor:pointer}
+.ai-composer-toolbar>button:hover{background:#302936;color:#f2d8f0}
+.toolbar-separator{height:17px;width:1px;flex:0 0 1px;background:#3c3541;margin:0 3px}
+.toolbar-spacer{flex:1;min-width:2px}
+.mini-select{display:flex;align-items:center;gap:3px;min-width:0;height:26px;padding:0 4px;border-radius:6px;color:#d0cbd5;font-size:10px;white-space:nowrap}
+.mini-select:hover{background:#2a2530}
+.mini-select select{width:auto;max-width:67px;min-width:0;appearance:none;border:0;outline:0;background:transparent;color:inherit;font-size:10px;cursor:pointer}
+.mini-select option{background:#19171e;color:#f3eef6}
+.autopilot-toggle{display:flex!important;align-items:center;gap:6px;width:auto!important;height:26px!important;flex:0 0 auto!important;padding:0 3px!important;color:#d0cbd5!important;font-size:10px;white-space:nowrap}
+.autopilot-toggle i{display:block;width:27px;height:15px;padding:2px;border-radius:20px;background:#514956;transition:background .18s}
+.autopilot-toggle i:after{content:"";display:block;width:11px;height:11px;border-radius:50%;background:#ddd6e3;transition:transform .18s}
+.autopilot-toggle.enabled i{background:#a855c8}
+.autopilot-toggle.enabled i:after{transform:translateX(12px);background:#fff}
+.composer-menu{position:absolute;z-index:100;bottom:100%;left:12px;display:flex;flex-direction:column;gap:3px;min-width:190px;margin-bottom:5px;padding:6px;border:1px solid #413849;border-radius:10px;background:#201c25;box-shadow:0 12px 32px #0008}
+.composer-menu button{display:flex;align-items:center;gap:8px;padding:9px;border:0;border-radius:6px;background:transparent;color:#e3dce9;text-align:left;font-size:11px;cursor:pointer}
+.composer-menu button:hover{background:#34283b}
+@media(max-width:360px){.mini-select select{max-width:47px}.ai-composer-toolbar{gap:1px}.autopilot-toggle span{display:none}.autopilot-toggle{padding:0 2px!important}}
