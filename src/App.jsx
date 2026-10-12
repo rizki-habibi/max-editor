@@ -112,6 +112,9 @@ export default function App(){
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
  const deployedVersion=useRef(null);
+ const savedRef=useRef(saved); savedRef.current=saved;
+ const pendingDeployment=useRef(null);
+ const refreshTimer=useRef(null);
  const latestWorkflowRun=useRef(null);
  const [updateNotice,setUpdateNotice]=useState(null);
   const [updatePanelOpen,setUpdatePanelOpen]=useState(false);
@@ -189,6 +192,22 @@ export default function App(){
 
  useEffect(()=>{
   let stopped=false;
+  const scheduleSafeRefresh=(version)=>{
+   if(!version||!savedRef.current||refreshTimer.current!==null)return;
+   refreshTimer.current=window.setTimeout(async()=>{
+    refreshTimer.current=null;
+    if(stopped||!savedRef.current)return;
+    try{
+     const response=await fetch("/version.json?confirm="+Date.now(),{cache:"no-store",headers:{"Cache-Control":"no-cache"}});
+     if(!response.ok)return;
+     const data=await response.json();
+     if(data?.version===version&&savedRef.current){
+      pendingDeployment.current=null;
+      window.location.reload();
+     }
+    }catch{}
+   },10000);
+  };
   const checkForDeployment=async()=>{
    try{
     const response=await fetch("/version.json?check="+Date.now(),{cache:"no-store",headers:{"Cache-Control":"no-cache"}});
@@ -198,14 +217,19 @@ export default function App(){
     if(deployedVersion.current===null){deployedVersion.current=data.version;return;}
     if(data.version!==deployedVersion.current){
      deployedVersion.current=data.version;
-     notifyUpdate("success","Versi baru tersedia","Pembaruan sudah terpasang. Simpan pekerjaan terlebih dahulu, lalu muat ulang halaman secara manual agar workspace tidak tiba-tiba menjadi layar hitam.");
+     pendingDeployment.current=data.version;
+     notifyUpdate("pending","Versi baru terdeteksi","MAX Editor akan memuat ulang otomatis dalam 10 detik setelah memastikan versi stabil. Perubahan yang belum tersimpan akan ditunggu.");
+    }
+    if(pendingDeployment.current){
+     if(savedRef.current)scheduleSafeRefresh(pendingDeployment.current);
+     else notifyUpdate("pending","Menunggu penyimpanan","Versi baru sudah tersedia. MAX Editor akan memuat ulang otomatis setelah perubahan tersimpan.");
     }
    }catch{}
   };
   checkForDeployment();
-  const timer=setInterval(checkForDeployment,30000);
+  const timer=setInterval(checkForDeployment,10000);
   window.addEventListener("focus",checkForDeployment);
-  return()=>{stopped=true;clearInterval(timer);window.removeEventListener("focus",checkForDeployment)};
+  return()=>{stopped=true;clearInterval(timer);window.removeEventListener("focus",checkForDeployment);if(refreshTimer.current!==null){window.clearTimeout(refreshTimer.current);refreshTimer.current=null}};
  },[saved]);
  const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
  const dirInput=useRef(null),localSocket=useRef(null);
