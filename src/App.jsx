@@ -224,9 +224,13 @@ export default function App(){
    }
    if(wantsReport){const stamp=new Date().toISOString().slice(0,16).replace("T","-").replaceAll(":","");const reportPath="laporan/Laporan-"+stamp+".md";setFiles(current=>({...current,[reportPath]:"# Laporan MAX AI\n\n"+result}));setOriginalFiles(current=>({...current,[reportPath]:""}));setActive(reportPath);setSaved(false);setCodeApplyStatus("Laporan dibuat sebagai "+reportPath+". Gunakan Dokumen & Ekspor untuk Word atau PDF.");}
    if(wantsCoding&&autopilot){
-    const multi=extractFileProposals(result),proposal=extractCodeBlock(result);
+    let multi=extractFileProposals(result),proposal=extractCodeBlock(result);
+    if(wantsMultiFile&&multi.length===0){
+     setCodeApplyStatus("Meminta ulang respons dalam format multi-file…");
+     try{result=await chatWithRouter(routerConfig,[...requestMsgs,{role:"assistant",content:String(result||"")},{role:"user",content:"Ulangi jawaban dengan format yang dapat diterapkan oleh MAX Editor. WAJIB satu blok untuk setiap file: ```file:src/path.ext pada baris pertama, isi lengkap file, lalu ``` pada baris terakhir. Jangan gunakan blok kode biasa. Jangan hanya mengembalikan file aktif; gunakan path yang ada pada daftar workspace dan keluarkan semua file yang memang perlu diubah."}]);multi=extractFileProposals(result);proposal=extractCodeBlock(result);setAiMessages(current=>{const next=[...current];const idx=next.map(m=>m.role).lastIndexOf("assistant");if(idx>=0)next[idx]={...next[idx],content:String(result||"")};return next;});}catch(retryError){setCodeApplyStatus("Permintaan ulang multi-file gagal: "+retryError.message);}
+    }
     if(multi.length)applyCodeProposal(result,requestPath);
-    else if(wantsMultiFile){setCodeApplyStatus("Belum diterapkan: model belum mengembalikan blok ```file:path``` untuk beberapa file. Ulangi dengan mode Edit dan minta setiap file dalam blok terpisah.");}
+    else if(wantsMultiFile){setCodeApplyStatus("Belum diterapkan: model tidak mengembalikan blok file:path yang valid. Tidak ada file yang diubah agar kode tidak salah ditempatkan.");}
     else if(proposal!==null){const ext=requestPath.split(".").pop().toLowerCase();const looksWrong=(ext==="js"||ext==="jsx"||ext==="ts"||ext==="tsx")&&(/^\\s*<!doctype html>|^\\s*<html[\\s>]|^\\s*#\\s/m.test(proposal));if(!looksWrong)applyCodeProposal(result,requestPath);else setCodeApplyStatus("Kode tidak diterapkan otomatis karena formatnya tidak cocok dengan "+requestPath+".");}
    }
   }catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}]);}
