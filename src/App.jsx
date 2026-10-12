@@ -196,7 +196,10 @@ export default function App(){
     const data=await response.json();
     if(stopped||!data?.version)return;
     if(deployedVersion.current===null){deployedVersion.current=data.version;return;}
-    if(data.version!==deployedVersion.current&&saved){notifyUpdate("success","Versi baru tersedia","MAX Editor akan dimuat ulang otomatis.");window.setTimeout(()=>window.location.reload(),1800);}
+    if(data.version!==deployedVersion.current){
+     deployedVersion.current=data.version;
+     notifyUpdate("success","Versi baru tersedia","Pembaruan sudah terpasang. Simpan pekerjaan terlebih dahulu, lalu muat ulang halaman secara manual agar workspace tidak tiba-tiba menjadi layar hitam.");
+    }
    }catch{}
   };
   checkForDeployment();
