@@ -177,9 +177,16 @@ export default function App(){
   const msgs=[...aiMessages,{role:"user",content:prompt+"\n\nFile aktif: "+requestPath+"\nDaftar file workspace:\n"+workspaceIndex+"\n\nIsi file aktif:\n"+requestCode.slice(0,18000)+relatedFiles+codingInstructions}];
   setAiMessages(msgs);
   try{
-   let result,activeModel=routerConfig.model,lastError;
-   try{result=await chatWithRouter(routerConfig,msgs);}catch(e){lastError=e;}
+   let result,activeModel=routerConfig.model,lastError,streamedText="";
+   setAiMessages([...msgs,{role:"assistant",content:""}]);
+   try{
+    result=await chatWithRouter(routerConfig,msgs,piece=>{
+     streamedText+=piece;
+     setAiMessages(current=>{const next=[...current];const last=next.length-1;if(last>=0&&next[last].role==="assistant")next[last]={...next[last],content:streamedText};return next;});
+    });
+   }catch(e){lastError=e;}
    if(result===undefined){
+    if(!streamedText)setAiMessages(current=>current.length&&current[current.length-1].role==="assistant"&&current[current.length-1].content===""?current.slice(0,-1):current);
     const errorText=String(lastError?.message||lastError||"");
     const shouldFailover=/403|401|429|500|502|503|504|account_suspended|suspended|rate.?limit|quota|overload|temporar|unavailable|no credentials/i.test(errorText);
     if(!shouldFailover||routerConfig.selectionType==="combo")throw lastError;
@@ -202,7 +209,11 @@ export default function App(){
     if(wantsCoding&&(extractCodeBlock(result)!==null||extractFileProposals(result).length))applyCodeProposal(result,requestPath)
     return;
    }
-   setAiMessages(m=>[...m,{role:"assistant",content:result}]);
+   if(streamedText){
+    setAiMessages(current=>{const next=[...current];const last=next.length-1;if(last>=0&&next[last].role==="assistant")next[last]={...next[last],content:result};return next;});
+   }else{
+    setAiMessages(m=>[...m,{role:"assistant",content:result}]);
+   }
    if(wantsReport){const stamp=new Date().toISOString().slice(0,16).replace("T","-").replaceAll(":","");const reportPath="laporan/Laporan-"+stamp+".md";setFiles(current=>({...current,[reportPath]:"# Laporan MAX AI\n\n"+result}));setOriginalFiles(current=>({...current,[reportPath]:""}));setActive(reportPath);setSaved(false);setCodeApplyStatus("Laporan dibuat sebagai "+reportPath+". Gunakan Dokumen & Ekspor untuk Word atau PDF.");}
    if(wantsCoding){
     const multi=extractFileProposals(result),proposal=extractCodeBlock(result);
@@ -216,7 +227,7 @@ export default function App(){
  async function testRouter(){setRouterStatus("Memeriksa...");const [models,combos]=await Promise.all([syncRouterModels(),syncRouterCombos()]);if(models.length||combos.length)setRouterStatus("Terhubung · "+models.length+" model · "+combos.length+" combo");else setRouterStatus(routerStats.error||comboError||"Tidak ada model atau combo aktif.")}
  function saveRouterLocal(){if(!routerConfig.model){setRouterStatus("Pilih model atau combo terlebih dahulu.");return;}saveRouterConfig(routerConfig);setRouterOpen(false);setRouterStatus((routerConfig.selectionType==="combo"?"Combo ":"Model ")+routerConfig.model+" siap digunakan.")}
  function chooseRouterMode(mode){setRouterConfig(current=>{if(mode==="combo"){const combo=routerCombos.find(x=>x.name===current.model)||routerCombos[0];return {...current,selectionType:"combo",model:combo?.name||""};}const model=routerModels.find(x=>x.id===current.model)||routerModels[0];return {...current,selectionType:"individual",model:model?.id||""};});}
- useEffect(()=>{if(!session)return;syncRouterModels();syncRouterCombos();const timer=setInterval(()=>{syncRouterModels();syncRouterCombos()},60000);return()=>clearInterval(timer)},[session,routerConfig.selectionType,routerConfig.model]); useEffect(()=>{if(!aiBusy||!aiStartedAt)return;const timer=setInterval(()=>setAiElapsed(Math.floor((Date.now()-aiStartedAt)/1000)),250);return()=>clearInterval(timer)},[aiBusy,aiStartedAt]);
+ useEffect(()=>{if(!session)return;syncRouterModels();syncRouterCombos();const timer=setInterval(()=>{syncRouterModels();syncRouterCombos()},60000);return()=>clearInterval(timer)},[session,routerConfig.selectionType,routerConfig.model]); useEffect(()=>{if(!aiBusy||!aiStartedAt)return;const timer=setInterval(()=>setAiElapsed(Math.floor((Date.now()-aiStartedAt)/1000)),250);return()=>clearInterval(timer)},[aiBusy,aiStartedAt]); useEffect(()=>{if(aiBodyRef.current)aiBodyRef.current.scrollTop=aiBodyRef.current.scrollHeight},[aiMessages,aiBusy]);
  function connectLocal(){
   if(localSocket.current?.readyState===WebSocket.OPEN){setLocalStatus("Local Agent terhubung");return}
   try{
@@ -288,9 +299,9 @@ export default function App(){
       <div className="statusbar"><span className="diff-summary"><i className="diff-added">+{changeStats.added}</i> <i className="diff-removed">−{changeStats.removed}</i></span><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
     </main>
     <aside className="ai-panel">
-      <div className="ai-head"><div><MessageSquare size={16}/><strong>MAX AI</strong></div><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?((routerConfig.selectionType==="combo"?"Combo · ":"")+routerConfig.model.split("/").slice(-1)[0]):"Pilih model"} <ChevronDown size={12}/></button></div>
-      <div className="ai-body">{aiBusy&&<div className="ai-working"><span className="ai-spinner"></span><div><strong>MAX AI sedang berpikir…</strong><small>{aiElapsed<10?"Mengirim permintaan dan menunggu model":aiElapsed<35?"Menganalisis konteks kode":aiElapsed<90?"Menyusun respons atau perubahan kode":"Respons lebih lama dari biasanya"} · {Math.floor(aiElapsed/60)}:{String(aiElapsed%60).padStart(2,"0")}</small><div className="ai-progress"><i style={{width:Math.min(96,12+aiElapsed*1.2)+"%"}}/></div></div></div>}{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon">M</div><h3>Asisten Kode AI</h3><p>Analisis file, cari kesalahan, atau minta perubahan melalui Max Router.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>requestCodingMode("Perbaiki dan optimalkan file aktif ini")}>Ngoding langsung</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div>{m.role==="assistant"&&(extractCodeBlock(m.content)!==null||extractFileProposals(m.content).length>0)&&<button className="apply-code-button" disabled={typingCode} onClick={()=>applyCodeProposal(m.content)}>{typingCode?"AI sedang mengetik…":"Terapkan kode ke editor"}</button>}</div>)}</div>}</div>
-      {codeApplyStatus&&<div className="code-apply-status"><span className={typingCode?"typing-cursor":""}></span>{codeApplyStatus}</div>}<div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan sesuatu kepada MAX AI..."/><button onClick={sendAi} disabled={aiBusy}><Play size={15}/></button></div>
+      <div className="ai-head"><div><span className="ai-brand-icon"><Sparkles size={15}/></span><strong>MAX AI</strong></div><div className="ai-head-actions"><button onClick={()=>setAiMessages([])} title="Percakapan baru" aria-label="Percakapan baru"><Trash2 size={14}/></button><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?((routerConfig.selectionType==="combo"?"Combo · ":"")+routerConfig.model.split("/").slice(-1)[0]):"Pilih model"} <ChevronDown size={12}/></button></div></div>
+      <div className="ai-body" ref={aiBodyRef}>{aiBusy&&<div className="ai-working"><span className="ai-spinner"></span><div><strong>MAX AI sedang berpikir…</strong><small>{aiElapsed<10?"Mengirim permintaan dan menunggu model":aiElapsed<35?"Menganalisis konteks kode":aiElapsed<90?"Menyusun respons atau perubahan kode":"Respons lebih lama dari biasanya"} · {Math.floor(aiElapsed/60)}:{String(aiElapsed%60).padStart(2,"0")}</small><div className="ai-progress"><i style={{width:Math.min(96,12+aiElapsed*1.2)+"%"}}/></div></div></div>}{aiMessages.length===0?<div className="ai-empty"><div className="ai-icon"><Sparkles size={23}/></div><h3>Apa yang ingin kamu buat?</h3><p>Tanyakan sesuatu, minta analisis file, atau biarkan MAX AI membantu menulis kode.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>requestCodingMode("Perbaiki dan optimalkan file aktif ini")}>Ngoding langsung</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}</div>{m.role==="assistant"&&(extractCodeBlock(m.content)!==null||extractFileProposals(m.content).length>0)&&<button className="apply-code-button" disabled={typingCode} onClick={()=>applyCodeProposal(m.content)}>{typingCode?"AI sedang mengetik…":"Terapkan kode ke editor"}</button>}</div>)}</div>}</div>
+      {codeApplyStatus&&<div className="code-apply-status"><span className={typingCode?"typing-cursor":""}></span>{codeApplyStatus}</div>}<div className="ai-composer"><div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan apa saja…"/><div className="ai-composer-actions"><button type="button" title="Sertakan file aktif" aria-label="Sertakan file aktif" onClick={()=>setAi(value=>(value?value+"\n\n":"")+"Gunakan file aktif `"+active+"` sebagai konteks utama.")}><Paperclip size={15}/></button><button className="ai-send" onClick={sendAi} disabled={aiBusy||!ai.trim()} title="Kirim pesan"><Send size={15}/></button></div></div><div className="ai-composer-hint">Enter untuk mengirim · Shift + Enter untuk baris baru</div></div>
       <div className="provider">MAX Router · {routerConfig.selectionType==="combo"?"Combo":"Individu"} · {routerConfig.model||"Pilih model"}</div>
     </aside>
    </div>
