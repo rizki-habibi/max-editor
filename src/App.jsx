@@ -276,7 +276,7 @@ export default function App(){
     setAiMessages(m=>[...m,{role:"assistant",content:"Model "+(routerConfig.model||"(belum dipilih)")+" gagal. Mendeteksi model alternatif dan mencoba otomatis…"}]);
     const models=await listRouterModels(routerConfig);
     const candidates=models.filter(m=>m?.id&&m.id!==routerConfig.model);
-    if(!candidates.length)throw new Error(errorText+"\\nTidak ada model alternatif yang terdaftar di MAX Router.");
+    if(!candidates.length)throw new Error(errorText+"\nTidak ada model alternatif yang terdaftar di MAX Router.");
     let switched=false;
     for(const candidate of candidates){
      try{
@@ -288,7 +288,7 @@ export default function App(){
     const next={...routerConfig,model:activeModel};
     setRouterConfig(next);saveRouterConfig(next);
     setRouterStatus("Otomatis beralih ke model aktif: "+activeModel);
-    setAiMessages(m=>[...m,{role:"assistant",content:"Berhasil beralih otomatis ke model "+activeModel+" karena model sebelumnya gagal.\\n\\n"+result}]);
+    setAiMessages(m=>[...m,{role:"assistant",content:"Berhasil beralih otomatis ke model "+activeModel+" karena model sebelumnya gagal.\n\n"+result}]);
     if(wantsCoding&&autopilot&&(extractCodeBlock(result)!==null||extractFileProposals(result).length)&&!wantsMultiFile)applyCodeProposal(result,requestPath)
     return;
    }
