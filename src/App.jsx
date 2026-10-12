@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
-import {FileCode2,FileText,FileJson,FileImage,FileSpreadsheet,FileType,File as FileIcon,Code2,Database,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot,Send,Paperclip,Trash2,Sparkles,PanelLeftClose,PanelRightClose,Hash,SlidersHorizontal,AtSign,SquarePen} from "lucide-react";
+import {FileCode2,FileText,FileJson,FileImage,FileSpreadsheet,FileType,File as FileIcon,Code2,Database,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot,Bell,Send,Paperclip,Trash2,Sparkles,PanelLeftClose,PanelRightClose,Hash,SlidersHorizontal,AtSign,SquarePen} from "lucide-react";
 import {loadWorkspace,saveFiles} from "./lib/editorDb";
 import {chatWithRouter,getRouterConfig,listRouterCombos,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
@@ -114,6 +114,17 @@ export default function App(){
  const deployedVersion=useRef(null);
  const latestWorkflowRun=useRef(null);
  const [updateNotice,setUpdateNotice]=useState(null);
+  const [updatePanelOpen,setUpdatePanelOpen]=useState(false);
+  const [updatesRead,setUpdatesRead]=useState(()=>{try{return localStorage.getItem("max-editor.updates-read")||""}catch{return ""}});
+  const updateHistory=[
+   {id:"2026-10-12-newline",date:"12 Okt 2026",title:"Perbaikan teks \n",detail:"Pembersihan otomatis untuk teks \n yang muncul di halaman dan perapian baris baru pada pesan."},
+   {id:"2026-10-12-excel",date:"12 Okt 2026",title:"Ekstensi Excel diperbaiki",detail:"File Excel kosong sekarang dibuat dengan ekstensi .xlsx."},
+   {id:"2026-10-12-checks",date:"12 Okt 2026",title:"Pemeriksaan otomatis",detail:"Workflow GitHub Actions memeriksa build, regresi teks \n, dan respons halaman produksi."}
+  ];
+  const latestUpdateId=updateHistory[0].id;
+  const hasUnreadUpdates=updatesRead!==latestUpdateId;
+  const markUpdatesRead=()=>{setUpdatesRead(latestUpdateId);try{localStorage.setItem("max-editor.updates-read",latestUpdateId)}catch{}};
+
  const notifyUpdate=(kind,title,message)=>{
   setUpdateNotice({kind,title,message,id:Date.now()});
   window.clearTimeout(window.__maxEditorNoticeTimer);
@@ -394,8 +405,9 @@ export default function App(){
    <input ref={dirInput} type="file" webkitdirectory="" directory="" multiple hidden onChange={importSelectedFiles}/>
    <header className="topbar">
     <div className="brand"><button className="panel-control" title={leftPanelOpen?"Tutup penjelajah file":"Buka penjelajah file"} aria-label={leftPanelOpen?"Tutup panel kiri":"Buka panel kiri"} onClick={()=>setLeftPanelOpen(v=>!v)}>{leftPanelOpen?<PanelLeftClose size={16}/>:<FolderOpen size={16}/>}</button><span className="brand-mark"><img src="/max-editor-logo.svg" alt=""/></span><strong>MAX Editor</strong><span className="badge">AKTIF</span></div>
-    <div className="top-actions"><button className="panel-control" title={rightPanelOpen?"Tutup MAX AI":"Buka MAX AI"} aria-label={rightPanelOpen?"Tutup panel kanan":"Buka panel kanan"} onClick={()=>setRightPanelOpen(v=>!v)}>{rightPanelOpen?<PanelRightClose size={16}/>:<Sparkles size={16}/>}</button><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Buat dan ekspor dokumen" onClick={()=>setDocumentsOpen(true)}><FileText size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});setSession(null)}} title="Keluar"><LogOut size={16}/></button></div>
+    <div className="top-actions"><button className="updates-bell" title="Riwayat pembaruan" aria-label="Riwayat pembaruan" aria-expanded={updatePanelOpen} onClick={()=>{setUpdatePanelOpen(v=>!v);markUpdatesRead()}}><Bell size={16}/>{hasUnreadUpdates&&<i/>}</button><button className="panel-control" title={rightPanelOpen?"Tutup MAX AI":"Buka MAX AI"} aria-label={rightPanelOpen?"Tutup panel kanan":"Buka panel kanan"} onClick={()=>setRightPanelOpen(v=>!v)}>{rightPanelOpen?<PanelRightClose size={16}/>:<Sparkles size={16}/>}</button><span className="cloud"><Cloud size={14}/> {workspace?"PostgreSQL Cloud":"Cloud"}</span><button title="Ambil folder Windows" onClick={importFolder}><FolderInput size={16}/></button><button title="Buat dan ekspor dokumen" onClick={()=>setDocumentsOpen(true)}><FileText size={16}/></button><button title="Penghubung MAX Router" onClick={()=>setRouterOpen(true)}><PlugZap size={16}/></button><GitWorkspace/><button title="Integrasi Pengembang" onClick={()=>setIntegrationsOpen(true)}><PlugZap size={16}/></button><button title="Simpan" onClick={save}><Save size={16}/></button><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});setSession(null)}} title="Keluar"><LogOut size={16}/></button></div>
    </header>
+   {updatePanelOpen&&<section className="updates-panel" aria-label="Riwayat pembaruan"><div className="updates-panel-head"><div><strong>Pembaruan MAX Editor</strong><small>Ringkasan perubahan terbaru</small></div><button type="button" onClick={()=>setUpdatePanelOpen(false)} aria-label="Tutup riwayat"><X size={15}/></button></div><div className="updates-list">{updateHistory.map(item=><article className="update-entry" key={item.id}><span className="update-entry-dot"><CheckCircle2 size={14}/></span><div><strong>{item.title}</strong><small>{item.date}</small><p>{item.detail}</p></div></article>)}</div><a className="updates-github-link" href="https://github.com/rizki-habibi/max-editor/commits/main" target="_blank" rel="noreferrer">Lihat semua perubahan di GitHub <GitBranch size={13}/></a></section>}
    <div className={`workspace ${leftPanelOpen?"left-panel-open":"left-panel-closed"} ${rightPanelOpen?"right-panel-open":"right-panel-closed"}`}>
     <aside className="sidebar">
       <div className="side-head"><span>PENJELAJAH</span><div><button onClick={importFolder}><FolderInput size={14}/></button><button onClick={createFile}><Plus size={15}/></button></div></div>
