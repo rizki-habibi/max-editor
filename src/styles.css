@@ -276,3 +276,27 @@
 .updates-github-link{display:flex;align-items:center;justify-content:center;gap:7px;padding:12px;border-top:1px solid #282f39;color:#8dbbff;text-decoration:none;font-size:11px}
 .updates-github-link:hover{background:#191f28}
 @media(max-width:600px){.updates-panel{right:8px;top:50px}.top-actions{gap:2px}.updates-bell{padding:5px!important}}
+
+
+/* Animasi antarmuka: panel, sidebar, popup, tombol, dan menu */
+@keyframes max-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes max-pop-in{0%{opacity:0;transform:translateY(10px) scale(.97)}70%{opacity:1;transform:translateY(-2px) scale(1.005)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes max-slide-left{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+@keyframes max-slide-right{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+@keyframes max-slide-up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes max-notice-in{0%{opacity:0;transform:translateY(-12px) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.sidebar,.ai-panel{animation:max-fade-in .24s ease-out both}
+.sidebar .side-head,.sidebar .project,.sidebar .file-item,.sidebar .folder{animation:max-slide-left .28s ease-out both}
+.sidebar .file-item:nth-of-type(2){animation-delay:.02s}.sidebar .file-item:nth-of-type(3){animation-delay:.04s}.sidebar .file-item:nth-of-type(4){animation-delay:.06s}
+.ai-panel .ai-head{animation:max-slide-right .25s ease-out both}
+.updates-panel,.router-modal,.git-modal,.model-detail-modal,.documents-panel,.composer-menu,.terminal,.bottom-panel,.update-notice{animation:max-pop-in .22s cubic-bezier(.2,.8,.2,1) both}
+.modal-backdrop{animation:max-fade-in .16s ease-out both}
+.modal-backdrop>.router-modal,.modal-backdrop>.model-detail-modal,.modal-backdrop>.git-modal{animation:max-pop-in .24s cubic-bezier(.2,.8,.2,1) both}
+.update-notice{animation:max-notice-in .24s ease-out both}
+button,.file-item,.suggestions button,.bottom-tabs button,.tab,.project,.folder{transition:background-color .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease,transform .18s ease,opacity .18s ease}
+.top-actions button:hover,.side-head button:hover,.git-toolbar-button:hover,.statusbar button:hover{transform:translateY(-1px)}
+.top-actions button:active,.side-head button:active,.git-toolbar-button:active,.statusbar button:active{transform:scale(.94)}
+.file-item:hover,.suggestions button:hover,.bottom-tabs button:hover{transform:translateX(2px)}
+.updates-panel,.router-modal,.model-detail-modal{transform-origin:top right}
+button:focus-visible,.file-item:focus-visible,.tab:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
