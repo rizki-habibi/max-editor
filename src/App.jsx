@@ -322,7 +322,9 @@ export default function App(){
     const ws=new WebSocket("ws://127.0.0.1:8765");
     localSocket.current=ws;
     ws.onopen=()=>setLocalStatus("Local Agent terhubung");
-    ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==="ready")setLocalStatus(m.message);if(m.type==="result"){setTerminalLines(x=>[...x,...(m.stdout?[m.stdout]:[]),...(m.stderr?["ERROR: "+m.stderr]:[]),"Exit code: "+m.code])}}catch{}};
+    let pendingTerminalLines=[];let terminalFrame=0;
+    const flushTerminal=()=>{terminalFrame=0;if(!pendingTerminalLines.length)return;const batch=pendingTerminalLines;pendingTerminalLines=[];setTerminalLines(x=>[...x,...batch])};
+    ws.onmessage=e=>{const raw=typeof e.data==="string"?e.data:"";if(!raw)return;let m;try{m=JSON.parse(raw)}catch{return}if(m?.type==="ready"){setLocalStatus(m.message);return}if(m?.type==="result"){if(m.stdout)pendingTerminalLines.push(m.stdout);if(m.stderr)pendingTerminalLines.push("ERROR: "+m.stderr);pendingTerminalLines.push("Exit code: "+m.code);if(!terminalFrame)terminalFrame=requestAnimationFrame(flushTerminal)}};
     ws.onerror=()=>setLocalStatus("Local Agent tidak ditemukan");
     ws.onclose=()=>{localSocket.current=null;setLocalStatus("Local Agent terputus")};
   }catch(e){setLocalStatus(e.message)}
