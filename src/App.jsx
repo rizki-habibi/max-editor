@@ -40,7 +40,7 @@ function CloudAuth({onSession}){
   <div className="auth-wrap">
    <section className="auth-hero"><div className="hero-kicker">DUNIA MAX <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HAI, PEMBUAT KODE!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">KODE.<br/><em>BUAT.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · PostgreSQL Cloud · MAX AI</div><div className="hero-lines"></div></section>
    <form className="auth-card" onSubmit={go}>
-    <input type="text" name="username" autoComplete="username" tabIndex={-1} aria-hidden="true" style={{position:"absolute",width:1,height:1,padding:0,margin:-1,overflow:"hidden",clip:"rect(0,0,0,0)",whiteSpace:"nowrap",border:0}} />
+    <input type="text" name="username" autoComplete="username" tabIndex={-1} aria-hidden="true" hidden />
     <div className="auth-card-top"><span className="panel-tag">AKSES PANEL</span><span className="panel-dots">● ● ●</span></div>
     <div className="auth-card-icon"><LogIn size={20}/></div>
     <h1>Masuk ke MAX Editor</h1><p>Masukkan kata sandi panel untuk membuka workspace.</p>
