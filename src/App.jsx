@@ -79,7 +79,7 @@ function CloudAuth({onSession}){
   <div className="comic-note">BANGUN<br/><strong>DUNIAMU</strong></div>
  </div>
 }
-export default function ComboVisual({routerConfig,routerCombos,routerModels,setModelDetail,setRouterConfig,saveRouterConfig,setRouterStatus}) {
+function ComboVisual({routerConfig,routerCombos,routerModels,setModelDetail,setRouterConfig,saveRouterConfig,setRouterStatus}) {
  const selectedCombo=routerCombos.find(item=>item.name===routerConfig.model);
  const comboModels=selectedCombo?.models||[];
  return <section className="combo-visual" aria-label="Susunan model combo">
@@ -96,7 +96,7 @@ export default function ComboVisual({routerConfig,routerCombos,routerModels,setM
  </section>;
 }
 
-function App(){
+export default function App(){
  const [files,setFiles]=useState({}); const [originalFiles,setOriginalFiles]=useState({}); const editorRef=useRef(null); const decorationsRef=useRef([]); const aiBodyRef=useRef(null);
  const [documentsOpen,setDocumentsOpen]=useState(false); const [leftPanelOpen,setLeftPanelOpen]=useState(true); const [rightPanelOpen,setRightPanelOpen]=useState(true); const [aiMode,setAiMode]=useState("Auto"); const [aiProfile,setAiProfile]=useState("Default"); const [autopilot,setAutopilot]=useState(true); const [composerMenu,setComposerMenu]=useState(false);
  const [session,setSession]=useState(null);
