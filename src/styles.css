@@ -243,3 +243,15 @@
 .model-detail-actions button{display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 12px;border:1px solid #c38ad8;border-radius:8px;background:#c38ad8;color:#211627;font-size:11px;font-weight:700;cursor:pointer}
 .model-detail-actions button.model-detail-secondary{border-color:#403849;background:#211e28;color:#e5dce9}
 @media(max-width:480px){.model-detail-modal{padding:14px}.model-capability-grid{grid-template-columns:minmax(0,1fr)}.model-detail-actions button{flex:1}}
+
+/* Deployment and error notifications */
+.update-notice{position:fixed;z-index:9999;top:18px;right:18px;width:min(390px,calc(100vw - 28px));display:flex;align-items:flex-start;gap:10px;padding:13px;border:1px solid #45394e;border-radius:12px;background:#17151d;color:#f2edf7;box-shadow:0 16px 45px #0009;animation:maxNoticeIn .22s ease-out}
+.update-notice.success{border-color:#2f7652}.update-notice.pending{border-color:#82642b}.update-notice.error{border-color:#9a414b}
+.update-notice-icon{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:9px;background:#292331;color:#d9b0ed}
+.update-notice.success .update-notice-icon{background:#173426;color:#83e0ac}.update-notice.pending .update-notice-icon{background:#3a2c17;color:#f1c36f}.update-notice.error .update-notice-icon{background:#421f27;color:#ff9aa4}
+.update-notice-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:5px}
+.update-notice-copy strong{font-size:12px;font-weight:750}.update-notice-copy span{font-size:11px;line-height:1.5;color:#c5bdcd;overflow-wrap:anywhere}
+.update-notice-copy a{display:flex;align-items:center;gap:5px;margin-top:3px;color:#e3b5f7;text-decoration:none;font-size:10px}
+.update-notice>button{display:grid;place-items:center;flex:0 0 24px;height:24px;border:0;border-radius:6px;background:transparent;color:#aaa0b5;cursor:pointer}.update-notice>button:hover{background:#302838;color:white}
+@keyframes maxNoticeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.update-notice{animation:none}}
