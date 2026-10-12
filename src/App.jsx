@@ -169,20 +169,20 @@ export default function App(){
  }
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
-  const requestPath=active; const requestCode=files[active]??""; const wantsReport=/\b(laporan|report|laporkan|buatkan laporan|ringkasan laporan)\b/i.test(prompt); const wantsCoding=!wantsReport&&(aiMode==="Edit"||/\b(buat|bikin|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt)); const wantsAnalysis=!wantsReport&&!wantsCoding&&(aiMode==="Analisis"||/\b(jelaskan|analisis|cek|review|cari|bug|periksa|apa fungsi)\b/i.test(prompt));
+  const requestPath=active; const requestCode=files[active]??""; const wantsReport=/\b(laporan|report|laporkan|buatkan laporan|ringkasan laporan)\b/i.test(prompt); const wantsMultiFile=/\b(semua file|seluruh file|banyak file|multi.?file|semua berkas|seluruh proyek|seluruh project|perbaiki semuanya|perbaiki semua|ubah semua file|edit semua file|beberapa file|4 file|empat file)\b/i.test(prompt); const wantsCoding=!wantsReport&&(wantsMultiFile||aiMode==="Edit"||/\b(buat|bikin|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt)); const wantsAnalysis=!wantsReport&&!wantsCoding&&(aiMode==="Analisis"||/\b(jelaskan|analisis|cek|review|cari|bug|periksa|apa fungsi)\b/i.test(prompt));
   setAi("");setAiBusy(true);setAiStartedAt(Date.now());setAiElapsed(0);
   // Hindari menyisipkan README dan seluruh isi workspace ke setiap pesan.
   const isReadmePath=p=>/^README(?:\.[^/]+)?$/i.test(String(p).split("/").pop()||"");
   const workspaceIndex=Object.keys(files).filter(p=>!isReadmePath(p)).sort().map(p=>(p===requestPath?"▶ ":"  ")+p).join("\n");
   const includeWorkspaceContext=(wantsCoding||wantsAnalysis)&&!isReadmePath(requestPath);
-  const relevantFiles=Object.entries(files).filter(([p])=>!isReadmePath(p)).slice(0,wantsCoding?24:5);
+  const relevantFiles=Object.entries(files).filter(([p])=>!isReadmePath(p)).slice(0,wantsMultiFile?40:wantsCoding?24:5);
   const fileContext=includeWorkspaceContext
    ? "\n\nKonteks file proyek (README dikecualikan):\nFile aktif: "+requestPath+"\nDaftar file:\n"+workspaceIndex+"\n"+relevantFiles.map(([p,c])=>"\n--- FILE: "+p+" ---\n"+String(c).slice(0,wantsCoding?6500:1800)).join("")+
      (wantsCoding?"\n\nTUGAS MULTI-FILE: periksa file relevan dan terapkan perubahan pada SEMUA file yang diperlukan. Kembalikan setiap file yang diubah sebagai blok terpisah berformat file:path/relatif.ext, diikuti isi LENGKAP file. Jangan keluarkan blok untuk file yang tidak diubah. Gunakan path relatif workspace dan jangan sertakan README kecuali diminta.":"")
    : "";
   const modeInstructions="\n\nPreferensi MAX AI: mode "+aiMode+"; profil "+aiProfile+"; autopilot "+(autopilot?"aktif":"nonaktif")+". "+(aiMode==="Tanya"?"Utamakan jawaban dan penjelasan; jangan mengubah file kecuali diminta jelas.":aiMode==="Analisis"?"Analisis dahulu, jelaskan temuan dan jangan mengubah file kecuali pengguna meminta perbaikan.":aiMode==="Edit"?"Utamakan implementasi perubahan pada file yang relevan dan keluarkan blok file lengkap.":"Pilih cara kerja sesuai permintaan pengguna.")+" "+(aiProfile==="Cepat"?"Jawab ringkas dan fokus pada solusi langsung.":aiProfile==="Teliti"?"Periksa dampak, edge case, dan konsistensi antarfIle dengan cermat.":aiProfile==="Kreatif"?"Tawarkan implementasi yang kreatif tetapi tetap konsisten dengan proyek.":"Gunakan keseimbangan antara kecepatan, ketelitian, dan kejelasan."); const codingInstructions=wantsReport?"\n\nMODE PEMBUAT LAPORAN: Susun laporan lengkap dalam Markdown dengan judul, ringkasan eksekutif, tujuan, metode/analisis, temuan, rekomendasi, kesimpulan, dan referensi bila tersedia. Jangan membuat klaim/fakta atau referensi palsu.":wantsCoding?"\n\nMODE AGEN CODING MAX EDITOR:\n- Gunakan hanya konteks file yang disertakan; jangan meminta atau mengulang README.md kecuali pengguna secara eksplisit memintanya.\n- Pertahankan dependensi, API, dan pola proyek yang ada.\n- Untuk satu file, keluarkan satu blok kode lengkap. Untuk banyak file, gunakan format blok file yang didukung MAX Editor dengan path relatif.\n- Jangan mengklaim build/test berhasil tanpa hasil tes nyata. Jangan meminta atau menampilkan API key.\n- Beri ringkasan singkat dan langkah verifikasi.":"";
   const displayMsgs=[...aiMessages,{role:"user",content:prompt}];
-  const requestMsgs=[...aiMessages,{role:"user",content:prompt+fileContext+modeInstructions+codingInstructions}];
+  const multiFileInstructions=wantsMultiFile?"\n\nPERMINTAAN WAJIB MULTI-FILE: keluarkan satu blok ```file:path/relatif.ext lalu isi lengkap lalu ``` untuk setiap file yang benar-benar perlu diubah. Jangan hanya mengubah file aktif. Gunakan path yang ada dalam daftar workspace.":""; const requestMsgs=[...aiMessages,{role:"user",content:prompt+fileContext+multiFileInstructions+modeInstructions+codingInstructions}];
   setAiMessages(displayMsgs);
   try{
    let result,activeModel=routerConfig.model,lastError,streamedText="";
@@ -214,7 +214,7 @@ export default function App(){
     setRouterConfig(next);saveRouterConfig(next);
     setRouterStatus("Otomatis beralih ke model aktif: "+activeModel);
     setAiMessages(m=>[...m,{role:"assistant",content:"Berhasil beralih otomatis ke model "+activeModel+" karena model sebelumnya gagal.\\n\\n"+result}]);
-    if(wantsCoding&&autopilot&&(extractCodeBlock(result)!==null||extractFileProposals(result).length))applyCodeProposal(result,requestPath)
+    if(wantsCoding&&autopilot&&(extractCodeBlock(result)!==null||extractFileProposals(result).length)&&!wantsMultiFile)applyCodeProposal(result,requestPath)
     return;
    }
    if(streamedText){
@@ -226,6 +226,7 @@ export default function App(){
    if(wantsCoding&&autopilot){
     const multi=extractFileProposals(result),proposal=extractCodeBlock(result);
     if(multi.length)applyCodeProposal(result,requestPath);
+    else if(wantsMultiFile){setCodeApplyStatus("Belum diterapkan: model belum mengembalikan blok ```file:path``` untuk beberapa file. Ulangi dengan mode Edit dan minta setiap file dalam blok terpisah.");}
     else if(proposal!==null){const ext=requestPath.split(".").pop().toLowerCase();const looksWrong=(ext==="js"||ext==="jsx"||ext==="ts"||ext==="tsx")&&(/^\\s*<!doctype html>|^\\s*<html[\\s>]|^\\s*#\\s/m.test(proposal));if(!looksWrong)applyCodeProposal(result,requestPath);else setCodeApplyStatus("Kode tidak diterapkan otomatis karena formatnya tidak cocok dengan "+requestPath+".");}
    }
   }catch(e){setAiMessages(m=>[...m,{role:"assistant",content:"Error: "+e.message}]);}
