@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
-import {FileCode2,FileText,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot} from "lucide-react";
+import {FileCode2,FileText,FileJson,FileImage,FileSpreadsheet,FileType,File as FileIcon,Code2,Database,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot} from "lucide-react";
 import {loadWorkspace,saveFiles} from "./lib/editorDb";
 import {chatWithRouter,getRouterConfig,listRouterCombos,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
@@ -17,8 +17,34 @@ hello();
 `
 };
 
+function getFileIcon(name) {
+  const ext = String(name).split(".").pop().toLowerCase();
+  if (["js","jsx","ts","tsx","mjs","cjs"].includes(ext)) return {Icon:Code2,kind:"javascript"};
+  if (["html","htm","xml","svg"].includes(ext)) return {Icon:FileCode2,kind:"html"};
+  if (["css","scss","sass","less"].includes(ext)) return {Icon:FileType,kind:"style"};
+  if (["json","jsonc"].includes(ext)) return {Icon:FileJson,kind:"json"};
+  if (["md","mdx","txt","rst"].includes(ext)) return {Icon:FileText,kind:"text"};
+  if (["png","jpg","jpeg","gif","webp","ico","bmp"].includes(ext)) return {Icon:FileImage,kind:"image"};
+  if (["csv","xls","xlsx"].includes(ext)) return {Icon:FileSpreadsheet,kind:"data"};
+  if (["sql","db"].includes(ext)) return {Icon:Database,kind:"database"};
+  if (["py","java","c","cpp","h","go","rs","php","rb"].includes(ext)) return {Icon:FileCode2,kind:"code"};
+  if (["yml","yaml","toml","ini","env"].includes(ext)) return {Icon:Settings,kind:"config"};
+  if (["sh","bash","ps1","bat","cmd"].includes(ext)) return {Icon:Terminal,kind:"terminal"};
+  return {Icon:FileIcon,kind:"default"};
+}
+
+function FileIconForTab({name}) {
+  const {Icon,kind}=getFileIcon(name);
+  return <Icon className={`file-icon icon-${kind}`} size={14} strokeWidth={2}/>;
+}
+
 function FileItem({name,active,onClick,folder=false}) {
-  return <button className={`file-item ${active?'active':''}`} onClick={onClick}>{folder?<Folder size={15}/>:<FileCode2 size={15}/>}<span>{name}</span></button>
+  const file = folder ? {Icon:Folder,kind:"folder"} : getFileIcon(name);
+  const Icon = file.Icon;
+  return <button className={`file-item ${active?"active":""}`} onClick={onClick} title={name}>
+    <Icon className={`file-icon icon-${file.kind}`} size={16} strokeWidth={2}/>
+    <span>{name.split("/").pop()}</span>
+  </button>
 }
 
 function CloudAuth({onSession}){
@@ -256,7 +282,7 @@ export default function App(){
       <div className="side-bottom"><div><Cloud size={15}/> Simpan otomatis ke PostgreSQL</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
     </aside>
     <main className="editor-area">
-      <div className="tabs"><div className="tab active"><FileCode2 size={14}/>{active}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
+      <div className="tabs"><div className="tab active"><span className="tab-file-icon"><FileIconForTab name={active}/></span>{active.split("/").pop()}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button><Search size={15}/></button></div>
       <div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor,monaco)=>{editorRef.current=editor;editorRef.current.monaco=monaco;editor.focus();}} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection",wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:10,horizontalScrollbarSize:10}}}/></div>
       {terminal&&<section className="bottom-panel"><div className="bottom-tabs"><button className={bottomTab==="Terminal"?"selected":""} onClick={()=>setBottomTab("Terminal")}><Terminal size={13}/> Terminal</button><button className={bottomTab==="Output"?"selected":""} onClick={()=>setBottomTab("Output")}>Output</button><button className={bottomTab==="Problems"?"selected":""} onClick={()=>setBottomTab("Problems")}><AlertTriangle size={13}/> Masalah {problems.length?`(${problems.length})`:""}</button><button className={bottomTab==="Build"?"selected":""} onClick={()=>setBottomTab("Build")}><Play size={13}/> Build</button><span className="bottom-spacer"/><button onClick={()=>setTerminal(false)} title="Tutup panel">×</button></div><div className="bottom-content">{bottomTab==="Build"?<><strong>{buildStatus}</strong><p>Build dijalankan melalui Local Agent pada folder proyek lokal.</p><button className="build-button" onClick={runBuild}><Play size={13}/> Jalankan Build</button><button className="build-button" onClick={autoInstallDependencies}><PlugZap size={13}/> Instal dependensi otomatis</button><p>MAX AI mendeteksi Composer, npm, Python, Go, Rust, Ruby, dan Java dari manifest proyek. Local Agent menjalankan perintah pada folder proyek yang sedang terhubung.</p></>:bottomTab==="Problems"?<div>{problems.length?problems.map((p,i)=><div key={i}>{p}</div>):"Belum ada hasil pemeriksaan kode. Jalankan Build untuk memeriksa proyek."}</div>:bottomTab==="Output"?terminalLines.map((line,i)=><div key={i}>{line}</div>):<><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-lines">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}</div><div className="terminal-command"><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="Masukkan perintah..." /></div></>}</div></section>}
       <div className="statusbar"><span className="diff-summary"><i className="diff-added">+{changeStats.added}</i> <i className="diff-removed">−{changeStats.removed}</i></span><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
