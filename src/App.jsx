@@ -40,6 +40,7 @@ function CloudAuth({onSession}){
   <div className="auth-wrap">
    <section className="auth-hero"><div className="hero-kicker">DUNIA MAX <span>01</span></div><div className="hero-logo">M</div><div className="hero-bubble"><strong>HAI, PEMBUAT KODE!</strong><span>Masuk sekali. Workspace tetap tersimpan di cloud.</span></div><div className="hero-title">KODE.<br/><em>BUAT.</em><br/>MAX.</div><div className="hero-caption">Monaco Editor · PostgreSQL Cloud · MAX AI</div><div className="hero-lines"></div></section>
    <form className="auth-card" onSubmit={go}>
+    <input type="text" name="username" autoComplete="username" tabIndex={-1} aria-hidden="true" style={{position:"absolute",width:1,height:1,padding:0,margin:-1,overflow:"hidden",clip:"rect(0,0,0,0)",whiteSpace:"nowrap",border:0}} />
     <div className="auth-card-top"><span className="panel-tag">AKSES PANEL</span><span className="panel-dots">● ● ●</span></div>
     <div className="auth-card-icon"><LogIn size={20}/></div>
     <h1>Masuk ke MAX Editor</h1><p>Masukkan kata sandi panel untuk membuka workspace.</p>
@@ -91,6 +92,7 @@ export default function App(){
   }catch(e){setRouterStats(x=>({...x,loading:false,error:e.message||"Gagal sinkron model."}));return []}
  }
  useEffect(()=>{let active=true;fetch("/api/auth/session",{credentials:"same-origin"}).then(async r=>{if(!r.ok)return null;return r.json()}).then(data=>{if(active&&data?.user)setSession({user:data.user,access_token:"cookie-session"});}).catch(()=>{});return()=>{active=false}},[]);
+ useEffect(()=>{const onExpired=()=>setSession(null);window.addEventListener("max-editor-auth-expired",onExpired);return()=>window.removeEventListener("max-editor-auth-expired",onExpired)},[]);
  useEffect(()=>{if(!session)return;(async()=>{filesHydrated.current=false;try{const data=await loadWorkspace(session);setWorkspace(data.workspace);const cloud=Object.fromEntries((data.files||[]).map(x=>[x.path,x.content]));setFiles(Object.keys(cloud).length?cloud:initialFiles);setOriginalFiles(Object.keys(cloud).length?cloud:initialFiles);const savedActive=localStorage.getItem("max-editor.active."+session.user.id);if(savedActive)setActive(savedActive);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(cloud).length});}catch(error){setFiles(initialFiles);setSyncState({status:"Gagal memuat PostgreSQL",lastSync:null,error:error.message,count:0});}finally{filesHydrated.current=true;}})()},[session]);
  const code=files[active]??"";
  const changeStats=useMemo(()=>{const before=String(originalFiles[active]??"").split("\n"),after=String(code).split("\n");let added=0,removed=0;const max=Math.max(before.length,after.length);for(let i=0;i<max;i++){if(before[i]===undefined&&after[i]!==undefined)added++;else if(after[i]===undefined&&before[i]!==undefined)removed++;else if(before[i]!==after[i]){added++;removed++;}}return {added,removed};},[originalFiles,active,code]);
