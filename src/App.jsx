@@ -94,6 +94,24 @@ export default function App(){
  const [routerModels,setRouterModels]=useState([]); const [routerCombos,setRouterCombos]=useState([]); const [comboError,setComboError]=useState(""); const [modelDetail,setModelDetail]=useState(null); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0); const [typingCode,setTypingCode]=useState(false); const [codeApplyStatus,setCodeApplyStatus]=useState(""); const typingTimer=useRef(null);
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
+ const deployedVersion=useRef(null);
+ useEffect(()=>{
+  let stopped=false;
+  const checkForDeployment=async()=>{
+   try{
+    const response=await fetch("/version.json?check="+Date.now(),{cache:"no-store",headers:{"Cache-Control":"no-cache"}});
+    if(!response.ok)return;
+    const data=await response.json();
+    if(stopped||!data?.version)return;
+    if(deployedVersion.current===null){deployedVersion.current=data.version;return;}
+    if(data.version!==deployedVersion.current&&saved) window.location.reload();
+   }catch{}
+  };
+  checkForDeployment();
+  const timer=setInterval(checkForDeployment,30000);
+  window.addEventListener("focus",checkForDeployment);
+  return()=>{stopped=true;clearInterval(timer);window.removeEventListener("focus",checkForDeployment)};
+ },[saved]);
  const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
  const dirInput=useRef(null),localSocket=useRef(null);
  function classifyModelPricing(model){
