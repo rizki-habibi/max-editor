@@ -181,13 +181,14 @@ export default function App(){
      (wantsCoding?"\n\nTUGAS MULTI-FILE: periksa file relevan dan terapkan perubahan pada SEMUA file yang diperlukan. Kembalikan setiap file yang diubah sebagai blok terpisah berformat file:path/relatif.ext, diikuti isi LENGKAP file. Jangan keluarkan blok untuk file yang tidak diubah. Gunakan path relatif workspace dan jangan sertakan README kecuali diminta.":"")
    : "";
   const codingInstructions=wantsReport?"\n\nMODE PEMBUAT LAPORAN: Susun laporan lengkap dalam Markdown dengan judul, ringkasan eksekutif, tujuan, metode/analisis, temuan, rekomendasi, kesimpulan, dan referensi bila tersedia. Jangan membuat klaim/fakta atau referensi palsu.":wantsCoding?"\n\nMODE AGEN CODING MAX EDITOR:\n- Gunakan hanya konteks file yang disertakan; jangan meminta atau mengulang README.md kecuali pengguna secara eksplisit memintanya.\n- Pertahankan dependensi, API, dan pola proyek yang ada.\n- Untuk satu file, keluarkan satu blok kode lengkap. Untuk banyak file, gunakan format blok file yang didukung MAX Editor dengan path relatif.\n- Jangan mengklaim build/test berhasil tanpa hasil tes nyata. Jangan meminta atau menampilkan API key.\n- Beri ringkasan singkat dan langkah verifikasi.":"";
-  const msgs=[...aiMessages,{role:"user",content:prompt+fileContext+codingInstructions}];
-  setAiMessages(msgs);
+  const displayMsgs=[...aiMessages,{role:"user",content:prompt}];
+  const requestMsgs=[...aiMessages,{role:"user",content:prompt+fileContext+codingInstructions}];
+  setAiMessages(displayMsgs);
   try{
    let result,activeModel=routerConfig.model,lastError,streamedText="";
-   setAiMessages([...msgs,{role:"assistant",content:""}]);
+   setAiMessages([...displayMsgs,{role:"assistant",content:""}]);
    try{
-    result=await chatWithRouter(routerConfig,msgs,piece=>{
+    result=await chatWithRouter(routerConfig,requestMsgs,piece=>{
      streamedText+=piece;
      setAiMessages(current=>{const next=[...current];const last=next.length-1;if(last>=0&&next[last].role==="assistant")next[last]={...next[last],content:streamedText};return next;});
     });
@@ -204,7 +205,7 @@ export default function App(){
     let switched=false;
     for(const candidate of candidates){
      try{
-      result=await chatWithRouter({...routerConfig,model:candidate.id},msgs);
+      result=await chatWithRouter({...routerConfig,model:candidate.id},requestMsgs);
       activeModel=candidate.id;switched=true;break;
      }catch(e){lastError=e;}
     }
