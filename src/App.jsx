@@ -223,7 +223,7 @@ export default function App(){
     setAiMessages(m=>[...m,{role:"assistant",content:result}]);
    }
    if(wantsReport){const stamp=new Date().toISOString().slice(0,16).replace("T","-").replaceAll(":","");const reportPath="laporan/Laporan-"+stamp+".md";setFiles(current=>({...current,[reportPath]:"# Laporan MAX AI\n\n"+result}));setOriginalFiles(current=>({...current,[reportPath]:""}));setActive(reportPath);setSaved(false);setCodeApplyStatus("Laporan dibuat sebagai "+reportPath+". Gunakan Dokumen & Ekspor untuk Word atau PDF.");}
-   if(wantsCoding){
+   if(wantsCoding&&autopilot){
     const multi=extractFileProposals(result),proposal=extractCodeBlock(result);
     if(multi.length)applyCodeProposal(result,requestPath);
     else if(proposal!==null){const ext=requestPath.split(".").pop().toLowerCase();const looksWrong=(ext==="js"||ext==="jsx"||ext==="ts"||ext==="tsx")&&(/^\\s*<!doctype html>|^\\s*<html[\\s>]|^\\s*#\\s/m.test(proposal));if(!looksWrong)applyCodeProposal(result,requestPath);else setCodeApplyStatus("Kode tidak diterapkan otomatis karena formatnya tidak cocok dengan "+requestPath+".");}
