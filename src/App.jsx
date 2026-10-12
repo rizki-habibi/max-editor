@@ -324,7 +324,7 @@ export default function App(){
     ws.onopen=()=>setLocalStatus("Local Agent terhubung");
     let pendingTerminalLines=[];let terminalFrame=0;
     const flushTerminal=()=>{terminalFrame=0;if(!pendingTerminalLines.length)return;const batch=pendingTerminalLines;pendingTerminalLines=[];setTerminalLines(x=>[...x,...batch])};
-    ws.onmessage=e=>{const raw=typeof e.data==="string"?e.data:"";if(!raw)return;let m;try{m=JSON.parse(raw)}catch{return}if(m?.type==="ready"){setLocalStatus(m.message);return}if(m?.type==="result"){if(m.stdout)pendingTerminalLines.push(m.stdout);if(m.stderr)pendingTerminalLines.push("ERROR: "+m.stderr);pendingTerminalLines.push("Exit code: "+m.code);if(!terminalFrame)terminalFrame=requestAnimationFrame(flushTerminal)}};
+    ws.onmessage=e=>{const raw=typeof e.data==="string"?e.data:"";if(!raw)return;window.setTimeout(()=>{let m;try{m=JSON.parse(raw)}catch{return}if(m?.type==="ready"){setLocalStatus(m.message);return}if(m?.type==="result"){if(m.stdout)pendingTerminalLines.push(m.stdout);if(m.stderr)pendingTerminalLines.push("ERROR: "+m.stderr);pendingTerminalLines.push("Exit code: "+m.code);if(!terminalFrame)terminalFrame=requestAnimationFrame(flushTerminal)}},0)};
     ws.onerror=()=>setLocalStatus("Local Agent tidak ditemukan");
     ws.onclose=()=>{localSocket.current=null;setLocalStatus("Local Agent terputus")};
   }catch(e){setLocalStatus(e.message)}
