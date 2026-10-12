@@ -127,6 +127,30 @@ export default function App(){
   return()=>{window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onRejection)};
  },[]);
  useEffect(()=>{
+  const root=document.getElementById("root");
+  if(!root)return;
+  const cleanVisibleEscapes=()=>{
+   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+   const remove=[];
+   let node;
+   while((node=walker.nextNode())){
+    const value=node.nodeValue||"";
+    // Remove a stray standalone literal \\n text node anywhere in the app.
+    if(value.trim()==="\\n"){remove.push(node);continue;}
+    // Normalize escaped newlines only in user-facing messages, not code/editor text.
+    const parent=node.parentElement;
+    if(parent?.closest(".ai-message,.update-notice-copy,.auth-message,.git-error,.router-status-box,.document-success")&&value.includes("\\\\n")){
+     node.nodeValue=value.replace(/\\\\n/g,"\\n");
+    }
+   }
+   for(const textNode of remove)textNode.parentNode?.removeChild(textNode);
+  };
+  cleanVisibleEscapes();
+  const observer=new MutationObserver(()=>cleanVisibleEscapes());
+  observer.observe(root,{subtree:true,childList:true,characterData:true});
+  return()=>observer.disconnect();
+ },[]);
+ useEffect(()=>{
   let stopped=false;
   const checkWorkflow=async()=>{
    try{
