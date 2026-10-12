@@ -52,7 +52,7 @@ export default function DocumentsPanel({files,active,code,onClose,onCreate}){
   }catch(e){setError("Gagal membuat dokumen: "+(e?.message||String(e)))}
  }
  function createBlank(){
-  const ext=({txt:"txt",md:"md",csv:"csv",xlsx:"csv",docx:"txt",pdf:"txt",html:"html",json:"json"})[format]||"txt";
+  const ext=({txt:"txt",md:"md",csv:"csv",xlsx:"xlsx",docx:"txt",pdf:"txt",html:"html",json:"json"})[format]||"txt";
   const initial=({csv:"Kolom 1,Kolom 2\nData 1,Data 2",json:"{\n  \"judul\": \"Dokumen baru\"\n}",html:"<!doctype html>\n<html lang=\"id\">\n<head><meta charset=\"utf-8\"><title>Dokumen baru</title></head>\n<body>\n</body>\n</html>"})[format]||"";
   onCreate?.((name.trim()||"Dokumen baru")+"."+ext,initial);
   setStatus("File kerja baru dibuat. Untuk membuat "+format.toUpperCase()+", gunakan tombol Unduh.");
