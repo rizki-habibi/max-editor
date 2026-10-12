@@ -120,3 +120,16 @@
 @media(max-width:900px){.ai-panel{width:300px;min-width:270px}}
 @media(max-width:680px){.ai-panel{width:250px;min-width:230px}.ai-messages{padding:13px 8px}.ai-composer{padding:7px}.ai-empty{padding:30px 12px}}
 @media(max-width:520px){.ai-panel{display:flex;position:fixed;z-index:30;right:0;top:46px;bottom:24px;width:min(100vw,360px);min-width:0;box-shadow:-18px 0 45px rgba(0,0,0,.4)}}
+
+
+/* Multi-file editor: empat panel yang dapat diedit serentak */
+.pane-toggle{display:inline-flex!important;align-items:center;gap:6px;padding:0 9px!important;border:1px solid #3a3541!important;border-radius:6px;background:#211c28!important;color:#e7c7e1!important;font-size:10px!important;white-space:nowrap}
+.pane-toggle:hover{background:#32243a!important;border-color:#a56b9c!important}
+.multi-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:1px;flex:1;min-height:0;overflow:hidden;background:#343640}
+.multi-editor-pane{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:#17181d;border:1px solid #292b33}
+.multi-pane-head{height:31px;flex:0 0 31px;display:flex;align-items:center;gap:5px;padding:0 6px;background:#202128;border-bottom:1px solid #33343e}
+.multi-pane-head select{flex:1;min-width:0;width:100%;height:24px;padding:2px 5px;background:#17181d;color:#d7d8e0;border:1px solid #393b46;border-radius:4px;font-size:10px;outline:none}
+.multi-pane-head button{height:23px;width:25px;flex:0 0 25px;border:1px solid #3b3d48;border-radius:4px;background:#292a33;color:#d8c5de;cursor:pointer}
+.multi-editor-pane .monaco-editor,.multi-editor-pane .overflow-guard{max-width:100%}
+.multi-pane-empty{display:grid;place-items:center;flex:1;color:#747681;font-size:11px;background:#17181d}
+@media(max-width:760px){.multi-editor-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(4,minmax(170px,1fr));overflow:auto}.multi-editor-pane{min-height:170px}.pane-toggle{font-size:9px!important;padding:0 5px!important}}
