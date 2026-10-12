@@ -186,7 +186,7 @@ export default function App(){
     });
    }catch(e){lastError=e;}
    if(result===undefined){
-    if(!streamedText)setAiMessages(current=>current.length&&current[current.length-1].role==="assistant"&&current[current.length-1].content===""?current.slice(0,-1):current);
+    setAiMessages(current=>current.length&&current[current.length-1].role==="assistant"?current.slice(0,-1):current);
     const errorText=String(lastError?.message||lastError||"");
     const shouldFailover=/403|401|429|500|502|503|504|account_suspended|suspended|rate.?limit|quota|overload|temporar|unavailable|no credentials/i.test(errorText);
     if(!shouldFailover||routerConfig.selectionType==="combo")throw lastError;
