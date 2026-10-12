@@ -67,3 +67,5 @@
 .document-note{display:block;color:#a99caf;font-size:11px;line-height:1.6;margin:12px 0}
 .document-success{border:1px solid #347b5b;background:#17372a;color:#b9f6d1;padding:9px;border-radius:7px;font-size:11px;overflow-wrap:anywhere}
 @media(max-width:520px){.document-format-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.documents-modal{padding:14px}.document-actions button{flex:1 1 42%}}
+
+.router-mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:4px;margin:12px 0;background:#090b0e;border:1px solid #303641;border-radius:8px}.router-modal .router-mode-toggle button{margin:0;border:1px solid transparent;background:transparent;color:#aab2bd;font-weight:700}.router-modal .router-mode-toggle button.selected{background:#e84747;border-color:#17191f;color:#fff;box-shadow:2px 2px 0 #17191f}.router-modal select{display:block;width:100%;box-sizing:border-box;margin-top:5px;background:#0b0d10;border:1px solid #303641;border-radius:6px;color:#e7ebef;padding:9px;font-size:11px}.router-modal select:focus{outline:2px solid #e84747;outline-offset:1px}.router-modal .router-status-box{overflow-wrap:anywhere}
