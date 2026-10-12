@@ -5,10 +5,17 @@ import pg from "pg";
 import crypto from "node:crypto";
 const { Pool } = pg;
 const app=express();
+app.set("etag", false);
 const PORT=Number(process.env.PORT)||8080;
 const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}});
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 app.use(express.json({limit:"10mb"}));
+app.use("/api", (_req,res,next)=>{
+ res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
+ res.setHeader("Pragma","no-cache");
+ res.setHeader("Expires","0");
+ next();
+});
 
 const EDITOR_PASSWORD=process.env.EDITOR_PASSWORD||"";
 const SESSION_SECRET=process.env.EDITOR_SESSION_SECRET||process.env.JWT_SECRET||crypto.createHash("sha256").update("MAX_EDITOR_SESSION_V1:"+(EDITOR_PASSWORD||process.env.DATABASE_URL||"MAX_EDITOR_LOCAL_SESSION_SECRET")).digest("hex");
