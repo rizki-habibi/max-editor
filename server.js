@@ -3,86 +3,286 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import crypto from "node:crypto";
+
 const { Pool } = pg;
-const app=express();
+const app = express();
 app.set("etag", false);
-const PORT=Number(process.env.PORT)||8080;
-const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}});
-const __dirname=path.dirname(fileURLToPath(import.meta.url));
-app.use(express.json({limit:"10mb"}));
-app.use("/api", (_req,res,next)=>{
- res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
- res.setHeader("Pragma","no-cache");
- res.setHeader("Expires","0");
- next();
+app.set("trust proxy", 1); // Railway sits behind a proxy: needed for correct client IPs.
+const PORT = Number(process.env.PORT) || 8080;
+const PRODUCTION = process.env.NODE_ENV === "production";
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+});
+// An idle client error must not crash the process.
+pool.on("error", (e) => console.error("[MAX Editor] idle PostgreSQL client error:", e.message));
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+app.use(express.json({ limit: "10mb" }));
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
 });
 
-const EDITOR_PASSWORD=process.env.EDITOR_PASSWORD||"";
-const SESSION_SECRET=process.env.EDITOR_SESSION_SECRET||process.env.JWT_SECRET||crypto.createHash("sha256").update("MAX_EDITOR_SESSION_V1:"+(EDITOR_PASSWORD||process.env.DATABASE_URL||"MAX_EDITOR_LOCAL_SESSION_SECRET")).digest("hex");
-function signSession(payload){const body=Buffer.from(JSON.stringify(payload)).toString("base64url");const sig=crypto.createHmac("sha256",SESSION_SECRET).update(body).digest("base64url");return body+"."+sig;}
-function readSession(req){
- const cookies=Object.fromEntries((req.headers.cookie||"").split(";").map(v=>v.trim()).filter(Boolean).map(v=>{const i=v.indexOf("=");return [v.slice(0,i),decodeURIComponent(v.slice(i+1))]}));
- const token=cookies.max_editor_session||"";const [body,sig]=token.split(".");
- if(!body||!sig)return null;
- const expected=crypto.createHmac("sha256",SESSION_SECRET).update(body).digest("base64url");
- const a=Buffer.from(sig),b=Buffer.from(expected);
- if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return null;
- try{const payload=JSON.parse(Buffer.from(body,"base64url").toString("utf8"));if(!payload.exp||payload.exp<Date.now()||payload.uid!=="max-editor-admin")return null;return payload;}catch{return null;}
+// ---------------------------------------------------------------- auth
+const EDITOR_PASSWORD = process.env.EDITOR_PASSWORD || "";
+const EXPLICIT_SECRET = process.env.EDITOR_SESSION_SECRET || process.env.JWT_SECRET || "";
+if (!EXPLICIT_SECRET) {
+  console.warn("[MAX Editor] EDITOR_SESSION_SECRET belum diatur; memakai rahasia turunan. Atur variabel ini di Railway untuk keamanan lebih baik.");
 }
-function userId(req){return readSession(req)?.uid||null;}
-function requireAuth(req,res,next){if(!userId(req))return res.status(401).json({error:"Sesi berakhir. Masuk kembali ke MAX Editor."});next();}
-app.post("/api/auth/login",(req,res)=>{
- if(!EDITOR_PASSWORD)return res.status(503).json({error:"Kata sandi panel belum dikonfigurasi di Railway."});
- const submitted=String(req.body?.password||"");
- const a=Buffer.from(submitted),b=Buffer.from(EDITOR_PASSWORD);
- if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.status(401).json({error:"Kata sandi tidak valid."});
- const token=signSession({uid:"max-editor-admin",exp:Date.now()+365*24*60*60*1000});
- res.setHeader("Set-Cookie","max_editor_session="+encodeURIComponent(token)+"; HttpOnly; Path=/; SameSite=Lax; Max-Age=31536000"+(process.env.NODE_ENV==="production"?"; Secure":""));
- res.json({ok:true,user:{id:"max-editor-admin"}});
-});
-app.get("/api/auth/session",(req,res)=>{const session=readSession(req);if(!session)return res.status(401).json({error:"Belum masuk."});res.json({user:{id:session.uid}});});
-app.post("/api/auth/logout",(req,res)=>{res.setHeader("Set-Cookie","max_editor_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0"+(process.env.NODE_ENV==="production"?"; Secure":""));res.json({ok:true});});
+const SESSION_SECRET =
+  EXPLICIT_SECRET ||
+  crypto.createHash("sha256")
+    .update("MAX_EDITOR_SESSION_V1:" + (EDITOR_PASSWORD || process.env.DATABASE_URL || "MAX_EDITOR_LOCAL_SESSION_SECRET"))
+    .digest("hex");
+const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+const ADMIN_UID = "max-editor-admin";
 
-async function init(){
- await pool.query("CREATE TABLE IF NOT EXISTS editor_workspaces (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT 'MAX Workspace', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
- await pool.query("CREATE TABLE IF NOT EXISTS editor_files (id BIGSERIAL PRIMARY KEY, workspace_id UUID NOT NULL REFERENCES editor_workspaces(id) ON DELETE CASCADE, path TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', language TEXT NOT NULL DEFAULT 'javascript', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(workspace_id,path))");
- await pool.query("CREATE INDEX IF NOT EXISTS editor_workspaces_owner_idx ON editor_workspaces(owner_id)");
+const sha256 = (value) => crypto.createHash("sha256").update(String(value)).digest();
+const sign = (body) => crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+function signSession(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return body + "." + sign(body);
 }
-app.get("/api/health",async(_req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"MAX Editor",database:"postgres"});}catch(e){res.status(503).json({ok:false,database:"error",detail:e.message});}});
-
-const ROUTER_BASE=(process.env.MAX_ROUTER_BASE_URL||"https://max-router-production.up.railway.app/v1").replace(/\/+$/,"");
-function routerHeaders(json=true){const h={};if(json)h["Content-Type"]="application/json";if(process.env.MAX_ROUTER_API_KEY)h.Authorization="Bearer "+process.env.MAX_ROUTER_API_KEY;return h;}
-app.get("/api/router/models",requireAuth,async(_req,res)=>{try{const up=await fetch(ROUTER_BASE+"/models",{headers:routerHeaders(false),signal:AbortSignal.timeout(25000)});const body=await up.text();const status=up.status===401?502:up.status;res.status(status).type(up.headers.get("content-type")||"application/json").send(up.status===401?JSON.stringify({error:"Autentikasi MAX Router ditolak. Periksa konfigurasi kunci di Railway; sesi MAX Editor tetap aktif."}):body);}catch(e){res.status(502).json({error:"Tidak dapat mengambil model dari MAX Router.",detail:e.message});}});
-app.get("/api/router/combos",requireAuth,async(_req,res)=>{try{const routerOrigin=new URL(ROUTER_BASE).origin;const up=await fetch(routerOrigin+"/api/combos",{headers:{...routerHeaders(false),"Accept":"application/json"},signal:AbortSignal.timeout(25000)});const body=await up.text();const status=up.status===401?502:up.status;res.status(status).type(up.headers.get("content-type")||"application/json").send(up.status===401?JSON.stringify({error:"MAX Router menolak akses daftar combo. Periksa pengaturan akses API pada Router."}):body);}catch(e){res.status(502).json({error:"Tidak dapat mengambil combo dari MAX Router.",detail:e.message});}});
-app.post("/api/router/chat/completions",requireAuth,async(req,res)=>{
- try{
-  const {model,messages,stream}=req.body||{};
-  if(!model||!Array.isArray(messages))return res.status(400).json({error:"Pilih model dan isi percakapan terlebih dahulu."});
-  const up=await fetch(ROUTER_BASE+"/chat/completions",{method:"POST",headers:routerHeaders(),body:JSON.stringify({model,messages,stream:stream===true}),signal:AbortSignal.timeout(120000)});
-  if(stream===true && up.ok && up.body){
-   res.status(up.status);
-   res.setHeader("Content-Type",up.headers.get("content-type")||"text/event-stream; charset=utf-8");
-   res.setHeader("Cache-Control","no-cache, no-transform");
-   res.setHeader("X-Accel-Buffering","no");
-   res.setHeader("Connection","keep-alive");
-   for await (const chunk of up.body){if(res.destroyed)break;res.write(chunk);}
-   if(!res.destroyed)res.end();
-   return;
+function parseCookies(header = "") {
+  const out = {};
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i < 1) continue;
+    try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } catch { /* malformed cookie value */ }
   }
-  const body=await up.text();
-  const status=up.status===401?502:up.status;
-  res.status(status).type(up.headers.get("content-type")||"application/json").send(up.status===401?JSON.stringify({error:"Autentikasi MAX Router ditolak. Periksa konfigurasi kunci di Railway; sesi MAX Editor tetap aktif."}):body);
- }catch(e){
-  if(res.headersSent){res.end();return;}
-  res.status(502).json({error:"MAX Router tidak menyelesaikan permintaan sebelum batas waktu atau koneksi upstream terputus.",detail:e.name==="TimeoutError"?"Permintaan MAX Router melewati batas waktu 120 detik. Periksa status penyedia/model di MAX Router.":e.message});
- }
+  return out;
+}
+function readSession(req) {
+  const token = parseCookies(req.headers.cookie).max_editor_session || "";
+  const [body, sig] = token.split(".");
+  if (!body || !sig) return null;
+  const a = Buffer.from(sig), b = Buffer.from(sign(body));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (!payload.exp || payload.exp < Date.now() || payload.uid !== ADMIN_UID) return null;
+    return payload;
+  } catch { return null; }
+}
+const userId = (req) => readSession(req)?.uid || null;
+function requireAuth(req, res, next) {
+  if (!userId(req)) return res.status(401).json({ error: "Sesi berakhir. Masuk kembali ke MAX Editor." });
+  next();
+}
+const cookieFlags = () => "; HttpOnly; Path=/; SameSite=Lax" + (PRODUCTION ? "; Secure" : "");
+
+// Brute-force protection: 10 failed attempts per IP per 15 minutes.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000, LOGIN_MAX_FAILURES = 10;
+const loginFailures = new Map();
+function loginBlocked(ip) {
+  const rec = loginFailures.get(ip);
+  if (!rec) return false;
+  if (rec.reset < Date.now()) { loginFailures.delete(ip); return false; }
+  return rec.count >= LOGIN_MAX_FAILURES;
+}
+function recordLoginFailure(ip) {
+  const now = Date.now();
+  const rec = loginFailures.get(ip);
+  if (!rec || rec.reset < now) loginFailures.set(ip, { count: 1, reset: now + LOGIN_WINDOW_MS });
+  else rec.count++;
+  if (loginFailures.size > 5000) for (const [k, v] of loginFailures) if (v.reset < now) loginFailures.delete(k);
+}
+
+app.post("/api/auth/login", (req, res) => {
+  if (!EDITOR_PASSWORD) return res.status(503).json({ error: "Kata sandi panel belum dikonfigurasi di Railway." });
+  const ip = req.ip || "unknown";
+  if (loginBlocked(ip)) return res.status(429).json({ error: "Terlalu banyak percobaan masuk. Coba lagi dalam beberapa menit." });
+  // Compare digests so neither timing nor length reveals anything about the password.
+  if (!crypto.timingSafeEqual(sha256(req.body?.password ?? ""), sha256(EDITOR_PASSWORD))) {
+    recordLoginFailure(ip);
+    return res.status(401).json({ error: "Kata sandi tidak valid." });
+  }
+  loginFailures.delete(ip);
+  const token = signSession({ uid: ADMIN_UID, exp: Date.now() + SESSION_TTL_MS });
+  res.setHeader("Set-Cookie", "max_editor_session=" + encodeURIComponent(token) + cookieFlags() + "; Max-Age=" + SESSION_TTL_MS / 1000);
+  res.json({ ok: true, user: { id: ADMIN_UID } });
+});
+app.get("/api/auth/session", (req, res) => {
+  const session = readSession(req);
+  if (!session) return res.status(401).json({ error: "Belum masuk." });
+  res.json({ user: { id: session.uid } });
+});
+app.post("/api/auth/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", "max_editor_session=" + cookieFlags() + "; Max-Age=0");
+  res.json({ ok: true });
 });
 
-app.get("/api/editor/workspace",requireAuth,async(req,res)=>{try{const uid=userId(req);let w=(await pool.query("SELECT * FROM editor_workspaces WHERE owner_id=$1 ORDER BY created_at LIMIT 1",[uid])).rows[0];if(!w) w=(await pool.query("INSERT INTO editor_workspaces(owner_id,name) VALUES($1,$2) RETURNING *",[uid,"MAX Workspace"])).rows[0];let files=(await pool.query("SELECT path,content,language,updated_at FROM editor_files WHERE workspace_id=$1 ORDER BY path",[w.id])).rows;
- const defaultReadme=files.find(f=>f.path==="README.md" && /^# MAX Editor\s+Editor coding online berbasis browser\.?\s*$/m.test(f.content));
- if(defaultReadme){await pool.query("DELETE FROM editor_files WHERE workspace_id=$1 AND path=$2",[w.id,"README.md"]);files=files.filter(f=>f.path!=="README.md");}
- if(!files.length){const initial=[["src/App.js","export default function hello() {\n  console.log('Hello from MAX Editor');\n}\n"],["src/index.js","import hello from './App.js';\n\nhello();\n"]];for(const [p,c] of initial) await pool.query("INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4)",[w.id,p,c,p.endsWith(".md")?"markdown":"javascript"]);return res.json({workspace:w,files:initial.map(([path,content])=>({path,content,language:path.endsWith(".md")?"markdown":"javascript"}))});}res.json({workspace:w,files});}catch(e){res.status(500).json({error:"Gagal memuat workspace PostgreSQL.",detail:e.message});}});
-app.put("/api/editor/files",requireAuth,async(req,res)=>{try{const uid=userId(req),{workspaceId,files}=req.body||{};if(!workspaceId||!Array.isArray(files))return res.status(400).json({error:"workspaceId dan files wajib diisi."});const owner=await pool.query("SELECT id FROM editor_workspaces WHERE id=$1 AND owner_id=$2",[workspaceId,uid]);if(!owner.rowCount)return res.status(403).json({error:"Workspace tidak valid."});await pool.query("BEGIN");for(const f of files){await pool.query("INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_id,path) DO UPDATE SET content=EXCLUDED.content,language=EXCLUDED.language,updated_at=NOW()",[workspaceId,String(f.path),String(f.content??""),String(f.language||"javascript")]);}await pool.query("COMMIT");res.json({ok:true,count:files.length,database:"postgres"});}catch(e){try{await pool.query("ROLLBACK")}catch{}res.status(500).json({error:"Gagal menyimpan file PostgreSQL.",detail:e.message});}});
-app.use(express.static(path.join(__dirname,"dist")));
-app.get("/{*splat}",(req,res)=>res.sendFile(path.join(__dirname,"dist","index.html")));
-init().then(()=>app.listen(PORT,"0.0.0.0",()=>console.log("[MAX Editor] PostgreSQL + web listening on "+PORT))).catch(e=>{console.error(e);process.exit(1);});
+// ---------------------------------------------------------------- database
+async function init() {
+  await pool.query("CREATE TABLE IF NOT EXISTS editor_workspaces (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT 'MAX Workspace', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+  await pool.query("CREATE TABLE IF NOT EXISTS editor_files (id BIGSERIAL PRIMARY KEY, workspace_id UUID NOT NULL REFERENCES editor_workspaces(id) ON DELETE CASCADE, path TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', language TEXT NOT NULL DEFAULT 'javascript', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(workspace_id,path))");
+  await pool.query("CREATE INDEX IF NOT EXISTS editor_workspaces_owner_idx ON editor_workspaces(owner_id)");
+}
+// Run fn inside a transaction on ONE dedicated connection. (Issuing BEGIN/COMMIT
+// through pool.query() may hit different connections and silently not be a transaction.)
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch { /* connection already gone */ }
+    throw e;
+  } finally { client.release(); }
+}
+app.get("/api/health", async (_req, res) => {
+  try { await pool.query("SELECT 1"); res.json({ ok: true, service: "MAX Editor", database: "postgres" }); }
+  catch (e) { res.status(503).json({ ok: false, database: "error", detail: e.message }); }
+});
+
+// ---------------------------------------------------------------- MAX Router proxy
+const ROUTER_BASE = (process.env.MAX_ROUTER_BASE_URL || "https://max-router-production.up.railway.app/v1").replace(/\/+$/, "");
+function routerHeaders(json = true) {
+  const h = {};
+  if (json) h["Content-Type"] = "application/json";
+  if (process.env.MAX_ROUTER_API_KEY) h.Authorization = "Bearer " + process.env.MAX_ROUTER_API_KEY;
+  return h;
+}
+const ROUTER_AUTH_ERROR = "Autentikasi MAX Router ditolak. Periksa konfigurasi kunci di Railway; sesi MAX Editor tetap aktif.";
+// Forward an upstream response; an upstream 401 becomes 502 so the browser does not think the *editor* session expired.
+async function relay(up, res, authMessage = ROUTER_AUTH_ERROR) {
+  const body = await up.text();
+  const unauthorized = up.status === 401;
+  res.status(unauthorized ? 502 : up.status)
+    .type(up.headers.get("content-type") || "application/json")
+    .send(unauthorized ? JSON.stringify({ error: authMessage }) : body);
+}
+app.get("/api/router/models", requireAuth, async (_req, res) => {
+  try { await relay(await fetch(ROUTER_BASE + "/models", { headers: routerHeaders(false), signal: AbortSignal.timeout(25000) }), res); }
+  catch (e) { res.status(502).json({ error: "Tidak dapat mengambil model dari MAX Router.", detail: e.message }); }
+});
+app.get("/api/router/combos", requireAuth, async (_req, res) => {
+  try {
+    const origin = new URL(ROUTER_BASE).origin;
+    const up = await fetch(origin + "/api/combos", { headers: { ...routerHeaders(false), Accept: "application/json" }, signal: AbortSignal.timeout(25000) });
+    await relay(up, res, "MAX Router menolak akses daftar combo. Periksa pengaturan akses API pada Router.");
+  } catch (e) { res.status(502).json({ error: "Tidak dapat mengambil combo dari MAX Router.", detail: e.message }); }
+});
+app.post("/api/router/chat/completions", requireAuth, async (req, res) => {
+  try {
+    const { model, messages, stream } = req.body || {};
+    if (!model || !Array.isArray(messages)) return res.status(400).json({ error: "Pilih model dan isi percakapan terlebih dahulu." });
+    const up = await fetch(ROUTER_BASE + "/chat/completions", { method: "POST", headers: routerHeaders(), body: JSON.stringify({ model, messages, stream: stream === true }), signal: AbortSignal.timeout(120000) });
+    if (stream === true && up.ok && up.body) {
+      res.status(up.status);
+      res.setHeader("Content-Type", up.headers.get("content-type") || "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.setHeader("Connection", "keep-alive");
+      res.on("close", () => { try { up.body.cancel(); } catch { /* already closed */ } }); // stop pulling upstream when the browser leaves
+      for await (const chunk of up.body) { if (res.destroyed) break; res.write(chunk); }
+      if (!res.destroyed) res.end();
+      return;
+    }
+    await relay(up, res);
+  } catch (e) {
+    if (res.headersSent) { res.end(); return; }
+    res.status(502).json({
+      error: "MAX Router tidak menyelesaikan permintaan sebelum batas waktu atau koneksi upstream terputus.",
+      detail: e.name === "TimeoutError" ? "Permintaan MAX Router melewati batas waktu 120 detik. Periksa status penyedia/model di MAX Router." : e.message,
+    });
+  }
+});
+
+// ---------------------------------------------------------------- workspace + files
+const MAX_FILES_PER_REQUEST = 2000;
+function validFilePath(p) {
+  if (typeof p !== "string" || !p || p.length > 300 || p.includes("\0") || p.includes("\\") || p.startsWith("/")) return false;
+  return !p.split("/").some((seg) => seg === ".." || seg === "." || seg === "");
+}
+const languageFor = (p) => (p.endsWith(".md") ? "markdown" : "javascript");
+const INITIAL_FILES = [
+  ["src/App.js", "export default function hello() {\n  console.log('Hello from MAX Editor');\n}\n"],
+  ["src/index.js", "import hello from './App.js';\n\nhello();\n"],
+];
+async function ownsWorkspace(uid, workspaceId) {
+  const r = await pool.query("SELECT 1 FROM editor_workspaces WHERE id=$1 AND owner_id=$2", [workspaceId, uid]);
+  return r.rowCount > 0;
+}
+
+app.get("/api/editor/workspace", requireAuth, async (req, res) => {
+  try {
+    const uid = userId(req);
+    const data = await withTransaction(async (db) => {
+      // The advisory lock stops two simultaneous first loads from creating two workspaces.
+      await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["editor-workspace:" + uid]);
+      let w = (await db.query("SELECT * FROM editor_workspaces WHERE owner_id=$1 ORDER BY created_at LIMIT 1", [uid])).rows[0];
+      if (!w) w = (await db.query("INSERT INTO editor_workspaces(owner_id,name) VALUES($1,$2) RETURNING *", [uid, "MAX Workspace"])).rows[0];
+      let files = (await db.query("SELECT path,content,language,updated_at FROM editor_files WHERE workspace_id=$1 ORDER BY path", [w.id])).rows;
+      const defaultReadme = files.find((f) => f.path === "README.md" && /^# MAX Editor\s+Editor coding online berbasis browser\.?\s*$/m.test(f.content));
+      if (defaultReadme) {
+        await db.query("DELETE FROM editor_files WHERE workspace_id=$1 AND path=$2", [w.id, "README.md"]);
+        files = files.filter((f) => f.path !== "README.md");
+      }
+      if (!files.length) {
+        for (const [p, c] of INITIAL_FILES) await db.query("INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4)", [w.id, p, c, languageFor(p)]);
+        files = INITIAL_FILES.map(([p, c]) => ({ path: p, content: c, language: languageFor(p) }));
+      }
+      return { workspace: w, files };
+    });
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: "Gagal memuat workspace PostgreSQL.", detail: e.message }); }
+});
+
+app.put("/api/editor/files", requireAuth, async (req, res) => {
+  try {
+    const { workspaceId, files } = req.body || {};
+    if (!workspaceId || !Array.isArray(files)) return res.status(400).json({ error: "workspaceId dan files wajib diisi." });
+    if (files.length > MAX_FILES_PER_REQUEST) return res.status(413).json({ error: "Terlalu banyak file dalam satu permintaan (maks " + MAX_FILES_PER_REQUEST + ")." });
+    const bad = files.find((f) => !validFilePath(f?.path));
+    if (bad) return res.status(400).json({ error: "Path file tidak valid: " + String(bad?.path).slice(0, 80) });
+    if (!(await ownsWorkspace(userId(req), workspaceId))) return res.status(403).json({ error: "Workspace tidak valid." });
+    await withTransaction(async (db) => {
+      for (const f of files) {
+        await db.query(
+          "INSERT INTO editor_files(workspace_id,path,content,language) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_id,path) DO UPDATE SET content=EXCLUDED.content,language=EXCLUDED.language,updated_at=NOW()",
+          [workspaceId, f.path, String(f.content ?? ""), String(f.language || "javascript")],
+        );
+      }
+    });
+    res.json({ ok: true, count: files.length, database: "postgres" });
+  } catch (e) { res.status(500).json({ error: "Gagal menyimpan file PostgreSQL.", detail: e.message }); }
+});
+
+app.delete("/api/editor/files", requireAuth, async (req, res) => {
+  try {
+    const { workspaceId, paths } = req.body || {};
+    if (!workspaceId || !Array.isArray(paths) || !paths.every(validFilePath)) return res.status(400).json({ error: "workspaceId dan paths yang valid wajib diisi." });
+    if (!(await ownsWorkspace(userId(req), workspaceId))) return res.status(403).json({ error: "Workspace tidak valid." });
+    const r = await pool.query("DELETE FROM editor_files WHERE workspace_id=$1 AND path = ANY($2::text[])", [workspaceId, paths]);
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (e) { res.status(500).json({ error: "Gagal menghapus file PostgreSQL.", detail: e.message }); }
+});
+
+// ---------------------------------------------------------------- static app
+const DIST = path.join(__dirname, "dist");
+app.use(express.static(DIST, {
+  setHeaders(res, filePath) {
+    // version.json drives the auto-update check and index.html points at the current bundle: never cache them.
+    if (/(version\.json|index\.html)$/.test(filePath)) res.setHeader("Cache-Control", "no-store");
+    else if (filePath.includes(path.sep + "assets" + path.sep)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  },
+}));
+// Unknown /api routes must answer JSON, not the SPA shell (clients call response.json()).
+app.all("/api/{*splat}", (_req, res) => res.status(404).json({ error: "Endpoint tidak ditemukan." }));
+app.get("/{*splat}", (_req, res) => res.sendFile(path.join(DIST, "index.html")));
+
+init()
+  .then(() => app.listen(PORT, "0.0.0.0", () => console.log("[MAX Editor] PostgreSQL + web listening on " + PORT)))
+  .catch((e) => { console.error(e); process.exit(1); });

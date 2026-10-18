@@ -1,7 +1,7 @@
 import {useRef,useState} from "react";
 import {Download,FileText,FileSpreadsheet,FileType,Plus,Upload,X} from "lucide-react";
 import * as XLSX from "xlsx";
-import {Document,Packer,Paragraph,TextRun,HeadingLevel} from "docx";
+import {Document,Packer,Paragraph,TextRun} from "docx";
 import {jsPDF} from "jspdf";
 
 const FORMATS=[

@@ -32,7 +32,8 @@ jobs:
         run: |
           test -f src/App.jsx
           test -f src/lib/maxRouter.js
-          test -f src/lib/supabase.js
+          test -f src/lib/languages.js
+          test -f server.js
           test -f local-agent/server.js
           test -f .github/workflows/ci.yml
           test -f scripts/check-visible-escapes.mjs

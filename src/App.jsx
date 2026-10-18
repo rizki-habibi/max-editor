@@ -1,10 +1,12 @@
-import {useEffect,useMemo,useRef,useState} from "react";
+import {Suspense,lazy,useEffect,useMemo,useRef,useState} from "react";
 import Editor from "@monaco-editor/react";
-import {FileCode2,FileText,FileJson,FileImage,FileSpreadsheet,FileType,File as FileIcon,Code2,Database,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,GitCommit,Download,AlertTriangle,CheckCircle2,CircleDot,Bell,Send,Paperclip,Trash2,Sparkles,PanelLeftClose,PanelRightClose,Hash,SlidersHorizontal,AtSign,SquarePen} from "lucide-react";
-import {loadWorkspace,saveFiles} from "./lib/editorDb";
+import {FileCode2,FileText,FileJson,FileImage,FileSpreadsheet,FileType,File as FileIcon,Code2,Database,Folder,FolderOpen,GitBranch,Play,Plus,Search,Settings,Terminal,ChevronDown,MessageSquare,Cloud,Save,LogIn,LogOut,Github,FolderInput,PlugZap,X,RefreshCw,AlertTriangle,CheckCircle2,CircleDot,Bell,Send,Paperclip,Trash2,Sparkles,PanelLeftClose,PanelRightClose,Hash,SlidersHorizontal,AtSign,SquarePen} from "lucide-react";
+import {deleteFiles,loadWorkspace,saveFiles} from "./lib/editorDb";
+import {isReadmePath,isValidFilePath,languageForPath,storedLanguage} from "./lib/languages";
 import {chatWithRouter,getRouterConfig,listRouterCombos,listRouterModels,saveRouterConfig} from "./lib/maxRouter";
 import GitWorkspace from "./components/GitWorkspace";
-import DocumentsPanel from "./components/DocumentsPanel";
+// Loaded on demand: pulls in xlsx, docx and jsPDF (most of the bundle).
+const DocumentsPanel=lazy(()=>import("./components/DocumentsPanel"));
 
 const initialFiles={
   "src/App.js": `export default function hello() {
@@ -38,13 +40,20 @@ function FileIconForTab({name}) {
   return <Icon className={`file-icon icon-${kind}`} size={14} strokeWidth={2}/>;
 }
 
-function FileItem({name,active,onClick,folder=false}) {
+function FileItem({name,active,onClick,folder=false,onRename,onDelete}) {
   const file = folder ? {Icon:Folder,kind:"folder"} : getFileIcon(name);
   const Icon = file.Icon;
-  return <button className={`file-item ${active?"active":""}`} onClick={onClick} title={name}>
-    <Icon className={`file-icon icon-${file.kind}`} size={16} strokeWidth={2}/>
-    <span>{name.split("/").pop()}</span>
-  </button>
+  const dir = name.includes("/") ? name.slice(0,name.lastIndexOf("/")) : "";
+  return <div className={`file-row ${active?"active":""}`}>
+    <button className={`file-item ${active?"active":""}`} onClick={onClick} title={name}>
+      <Icon className={`file-icon icon-${file.kind}`} size={16} strokeWidth={2}/>
+      <span>{name.split("/").pop()}</span>{dir&&<small className="file-dir">{dir}</small>}
+    </button>
+    {(onRename||onDelete)&&<span className="file-actions">
+      {onRename&&<button type="button" title="Ganti nama" aria-label={"Ganti nama "+name} onClick={onRename}><SquarePen size={12}/></button>}
+      {onDelete&&<button type="button" title="Hapus" aria-label={"Hapus "+name} onClick={onDelete}><Trash2 size={12}/></button>}
+    </span>}
+  </div>
 }
 
 function CloudAuth({onSession}){
@@ -103,7 +112,7 @@ export default function App(){
  const [workspace,setWorkspace]=useState(null);
  const [active,setActive]=useState("src/App.js"); const [splitView,setSplitView]=useState(false); const [paneFiles,setPaneFiles]=useState(["src/App.js","src/index.js","",""]);
  const [ai,setAi]=useState("");
- const [terminal,setTerminal]=useState(false); const [bottomTab,setBottomTab]=useState("Terminal"); const [buildStatus,setBuildStatus]=useState("Belum dijalankan"); const [problems,setProblems]=useState([]);
+ const [terminal,setTerminal]=useState(false); const [bottomTab,setBottomTab]=useState("Terminal"); const [buildStatus,setBuildStatus]=useState("Belum dijalankan"); const [problems]=useState([]);
  const [saved,setSaved]=useState(true);
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
@@ -111,6 +120,8 @@ export default function App(){
  const [routerModels,setRouterModels]=useState([]); const [routerCombos,setRouterCombos]=useState([]); const [comboError,setComboError]=useState(""); const [modelDetail,setModelDetail]=useState(null); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0); const [typingCode,setTypingCode]=useState(false); const [codeApplyStatus,setCodeApplyStatus]=useState(""); const typingTimer=useRef(null);
  const [syncState,setSyncState]=useState({status:"Menunggu",lastSync:null,error:"",count:0});
  const filesHydrated=useRef(false),saveTimer=useRef(null);
+ const filesRef=useRef(files); filesRef.current=files;
+ const snapshotRef=useRef({}),pendingDeletes=useRef(new Set()),saveInFlight=useRef(false),saveAllRef=useRef(null);
  const deployedVersion=useRef(null);
  const savedRef=useRef(saved); savedRef.current=saved;
  const pendingDeployment=useRef(null);
@@ -144,7 +155,7 @@ export default function App(){
   const root=document.body;
   if(!root)return;
   const cleanVisibleEscapes=()=>{
-   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.parentElement?.closest(".monaco-editor")?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT});
    const remove=[];
    let node;
    while((node=walker.nextNode())){
@@ -160,9 +171,11 @@ export default function App(){
    for(const textNode of remove)textNode.parentNode?.removeChild(textNode);
   };
   cleanVisibleEscapes();
-  const observer=new MutationObserver(()=>cleanVisibleEscapes());
+  let frame=0;
+  const inEditor=node=>(node.nodeType===1?node:node.parentElement)?.closest?.(".monaco-editor");
+  const observer=new MutationObserver(records=>{if(records.every(r=>inEditor(r.target))||frame)return;frame=requestAnimationFrame(()=>{frame=0;cleanVisibleEscapes()})});
   observer.observe(root,{subtree:true,childList:true,characterData:true});
-  return()=>observer.disconnect();
+  return()=>{observer.disconnect();if(frame)cancelAnimationFrame(frame)};
  },[]);
  useEffect(()=>{
   let stopped=false;
@@ -186,7 +199,7 @@ export default function App(){
    }catch{}
   };
   checkWorkflow();
-  const timer=setInterval(checkWorkflow,60000);
+  const timer=setInterval(checkWorkflow,300000);
   return()=>{stopped=true;clearInterval(timer)};
  },[]);
 
@@ -231,7 +244,7 @@ export default function App(){
   window.addEventListener("focus",checkForDeployment);
   return()=>{stopped=true;clearInterval(timer);window.removeEventListener("focus",checkForDeployment);if(refreshTimer.current!==null){window.clearTimeout(refreshTimer.current);refreshTimer.current=null}};
  },[saved]);
- const [folderInfo,setFolderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
+ const [folderInfo]=useState(()=>{try{return JSON.parse(localStorage.getItem("max-editor.folder")||"null")}catch{return null}});
  const dirInput=useRef(null),localSocket=useRef(null);
  function classifyModelPricing(model){
   const p=model?.pricing;
@@ -256,20 +269,67 @@ export default function App(){
  }
  useEffect(()=>{let active=true;fetch("/api/auth/session",{credentials:"same-origin"}).then(async r=>{if(!r.ok)return null;return r.json()}).then(data=>{if(active&&data?.user)setSession({user:data.user,access_token:"cookie-session"});}).catch(()=>{});return()=>{active=false}},[]);
  useEffect(()=>{const onExpired=()=>setSession(null);window.addEventListener("max-editor-auth-expired",onExpired);return()=>window.removeEventListener("max-editor-auth-expired",onExpired)},[]);
- useEffect(()=>{if(!session)return;(async()=>{filesHydrated.current=false;try{const data=await loadWorkspace(session);setWorkspace(data.workspace);const cloud=Object.fromEntries((data.files||[]).map(x=>[x.path,x.content]));setFiles(Object.keys(cloud).length?cloud:initialFiles);setOriginalFiles(Object.keys(cloud).length?cloud:initialFiles);const savedActive=localStorage.getItem("max-editor.active."+session.user.id);if(savedActive)setActive(savedActive);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(cloud).length});}catch(error){setFiles(initialFiles);setSyncState({status:"Gagal memuat PostgreSQL",lastSync:null,error:error.message,count:0});}finally{filesHydrated.current=true;}})()},[session]);
+ useEffect(()=>{if(!session)return;(async()=>{filesHydrated.current=false;try{const data=await loadWorkspace();setWorkspace(data.workspace);const cloud=Object.fromEntries((data.files||[]).map(x=>[x.path,x.content]));snapshotRef.current={...cloud};pendingDeletes.current.clear();setFiles(Object.keys(cloud).length?cloud:initialFiles);setOriginalFiles(Object.keys(cloud).length?cloud:initialFiles);const savedActive=localStorage.getItem("max-editor.active."+session.user.id);const wanted=savedActive&&cloud[savedActive]!==undefined?savedActive:(cloud["src/App.js"]!==undefined?"src/App.js":Object.keys(cloud).sort()[0]);if(wanted)setActive(wanted);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(cloud).length});}catch(error){setFiles(initialFiles);setSyncState({status:"Gagal memuat PostgreSQL",lastSync:null,error:error.message,count:0});}finally{filesHydrated.current=true;}})()},[session]);
  const code=files[active]??"";
  const changeStats=useMemo(()=>{const before=String(originalFiles[active]??"").split("\n"),after=String(code).split("\n");let added=0,removed=0;const max=Math.max(before.length,after.length);for(let i=0;i<max;i++){if(before[i]===undefined&&after[i]!==undefined)added++;else if(after[i]===undefined&&before[i]!==undefined)removed++;else if(before[i]!==after[i]){added++;removed++;}}return {added,removed};},[originalFiles,active,code]);
  useEffect(()=>{const editor=editorRef.current;if(!editor)return;const before=String(originalFiles[active]??"").split("\n"),after=String(code).split("\n");const max=Math.max(before.length,after.length),next=[];for(let i=0;i<max;i++){if(before[i]===after[i])continue;const line=Math.min(i+1,Math.max(1,after.length));next.push({range:new editor.monaco.Range(line,1,line,1),options:{isWholeLine:true,linesDecorationsClassName:before[i]===undefined?"max-gutter-added":after[i]===undefined?"max-gutter-removed":"max-gutter-modified",className:before[i]===undefined?"max-line-added":after[i]===undefined?"max-line-removed":"max-line-modified"}})}try{decorationsRef.current=editor.deltaDecorations(decorationsRef.current,next)}catch{}},[active,code,originalFiles]);
- const language=useMemo(()=>{const ext=active.split(".").pop().toLowerCase();const map={md:"markdown",markdown:"markdown",json:"json",css:"css",scss:"scss",less:"less",html:"html",htm:"html",xml:"xml",svg:"xml",yaml:"yaml",yml:"yaml",py:"python",pyw:"python",java:"java",kt:"kotlin",kts:"kotlin",cs:"csharp",cpp:"cpp",cc:"cpp",c:"c",h:"c",go:"go",rs:"rust",php:"php",rb:"ruby",sql:"sql",sh:"shell",bash:"shell",ps1:"powershell",bat:"bat",cmd:"bat",vue:"html",svelte:"html",ts:"typescript",tsx:"typescript",jsx:"javascript",js:"javascript",mjs:"javascript",cjs:"javascript"};return map[ext]||"plaintext"},[active]);
+ const language=useMemo(()=>languageForPath(active),[active]);
 
- function updateCode(value){setFiles(f=>({...f,[active]:value??""}));setSaved(false);setSyncState(x=>({...x,status:"Perubahan lokal belum diunggah"}))}
- async function saveAll(reason="manual"){if(!workspace||!filesHydrated.current)return;const entries=Object.entries(files);if(!entries.length)return;setSyncState(x=>({...x,status:reason==="timer"?"Sinkronisasi otomatis...":"Menyimpan ke PostgreSQL...",error:""}));try{await saveFiles(session,workspace.id,entries.map(([path,content])=>({path,content,language:path.endsWith(".md")?"markdown":path.endsWith(".json")?"json":path.endsWith(".css")?"css":path.endsWith(".html")?"html":"javascript"})));setSaved(true);setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:entries.length});}catch(error){setSaved(false);setSyncState(x=>({...x,status:"Gagal menyimpan",error:error.message}));}}
+ function updateCode(value){if(!active)return;setFiles(f=>({...f,[active]:value??""}));setSaved(false);setSyncState(x=>({...x,status:"Perubahan lokal belum diunggah"}))}
+ async function saveAll(reason="manual"){
+  if(!workspace||!filesHydrated.current||saveInFlight.current)return;
+  const changed=Object.entries(filesRef.current).filter(([path,content])=>isValidFilePath(path)&&snapshotRef.current[path]!==content);
+  const removed=[...pendingDeletes.current];
+  if(!changed.length&&!removed.length){setSaved(true);return}
+  saveInFlight.current=true;let again=false;
+  setSyncState(x=>({...x,status:reason==="manual"?"Menyimpan ke PostgreSQL...":"Sinkronisasi otomatis...",error:""}));
+  try{
+   if(removed.length){await deleteFiles(workspace.id,removed);removed.forEach(path=>{pendingDeletes.current.delete(path);delete snapshotRef.current[path]})}
+   if(changed.length){await saveFiles(workspace.id,changed.map(([path,content])=>({path,content,language:storedLanguage(path)})));changed.forEach(([path,content])=>{snapshotRef.current[path]=content})}
+   const latest=filesRef.current;
+   const clean=pendingDeletes.current.size===0&&Object.entries(latest).every(([path,content])=>!isValidFilePath(path)||snapshotRef.current[path]===content);
+   setSaved(clean);again=!clean;
+   setSyncState({status:"Tersimpan di PostgreSQL",lastSync:new Date().toLocaleTimeString("id-ID"),error:"",count:Object.keys(latest).length});
+  }catch(error){setSaved(false);setSyncState(x=>({...x,status:"Gagal menyimpan",error:error.message}))}
+  finally{saveInFlight.current=false;if(again)setTimeout(()=>saveAllRef.current?.("debounce"),1500)}
+ }
+ saveAllRef.current=saveAll;
  async function save(){await saveAll("manual")}
+ function deleteFile(name){
+  if(!window.confirm("Hapus file "+name+"? File juga dihapus dari PostgreSQL."))return;
+  if(snapshotRef.current[name]!==undefined)pendingDeletes.current.add(name);
+  const rest=Object.keys(filesRef.current).filter(path=>path!==name).sort();
+  setFiles(f=>{const next={...f};delete next[name];return next});
+  setOriginalFiles(f=>{const next={...f};delete next[name];return next});
+  setPaneFiles(list=>list.map(path=>path===name?"":path));
+  if(active===name)setActive(rest[0]||"");
+  setSaved(false);
+ }
+ function renameFile(name){
+  const next=(window.prompt("Nama baru untuk "+name,name)||"").trim();
+  if(!next||next===name)return;
+  const fail=message=>{setCodeApplyStatus(message);setTimeout(()=>setCodeApplyStatus(""),5000)};
+  if(!isValidFilePath(next))return fail("Nama file tidak valid: "+next);
+  if(filesRef.current[next]!==undefined)return fail("Sudah ada file bernama "+next);
+  if(snapshotRef.current[name]!==undefined)pendingDeletes.current.add(name);
+  pendingDeletes.current.delete(next);
+  setFiles(f=>{const copy={...f};copy[next]=copy[name];delete copy[name];return copy});
+  setOriginalFiles(f=>{const copy={...f};if(name in copy){copy[next]=copy[name];delete copy[name]}return copy});
+  setPaneFiles(list=>list.map(path=>path===name?next:path));
+  if(active===name)setActive(next);
+  setSaved(false);
+ }
+ useEffect(()=>{
+  const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveAllRef.current?.("manual")}};
+  const onBeforeUnload=e=>{if(!savedRef.current){e.preventDefault();e.returnValue=""}};
+  window.addEventListener("keydown",onKey);window.addEventListener("beforeunload",onBeforeUnload);
+  return()=>{window.removeEventListener("keydown",onKey);window.removeEventListener("beforeunload",onBeforeUnload)};
+ },[]);
  useEffect(()=>{if(!session||!filesHydrated.current)return;localStorage.setItem("max-editor.active."+session.user.id,active);},[active,files,session]);
- useEffect(()=>{if(!session||!filesHydrated.current)return;clearTimeout(saveTimer.current);saveTimer.current=setTimeout(()=>saveAll("debounce"),2000);return()=>clearTimeout(saveTimer.current)},[files,session,workspace]);
- useEffect(()=>{if(!session||!workspace||!filesHydrated.current)return;const timer=setInterval(()=>saveAll("timer"),30000);return()=>clearInterval(timer)},[session,workspace,files]);
- useEffect(()=>{if(!session||!workspace||!filesHydrated.current)return;const onHide=()=>{if(document.visibilityState==="hidden")saveAll("timer")};document.addEventListener("visibilitychange",onHide);return()=>document.removeEventListener("visibilitychange",onHide)},[session,workspace,files]);
- function createFile(){const n=prompt("Nama file baru");if(!n)return;setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
+ useEffect(()=>{if(!session||!filesHydrated.current)return;clearTimeout(saveTimer.current);saveTimer.current=setTimeout(()=>saveAllRef.current("debounce"),2000);return()=>clearTimeout(saveTimer.current)},[files,session,workspace]);
+ useEffect(()=>{if(!session||!workspace||!filesHydrated.current)return;const timer=setInterval(()=>saveAllRef.current("timer"),30000);return()=>clearInterval(timer)},[session,workspace,files]);
+ useEffect(()=>{if(!session||!workspace||!filesHydrated.current)return;const onHide=()=>{if(document.visibilityState==="hidden")saveAllRef.current("timer")};document.addEventListener("visibilitychange",onHide);return()=>document.removeEventListener("visibilitychange",onHide)},[session,workspace,files]);
+ function createFile(){const n=(prompt("Nama file baru")||"").trim();if(!n)return;if(!isValidFilePath(n)){setCodeApplyStatus("Nama file tidak valid: "+n);setTimeout(()=>setCodeApplyStatus(""),5000);return}if(filesRef.current[n]!==undefined){setActive(n);return}setFiles(f=>({...f,[n]:""}));setActive(n);setSaved(false)}
  async function importFolder(){if(!window.showDirectoryPicker){dirInput.current?.click();return}try{const root=await window.showDirectoryPicker();const next={};async function walk(handle,path=""){for await(const [name,entry] of handle.entries()){if(name==="node_modules"||name===".git"||name==="dist"||name==="build")continue;const p=path?path+"/"+name:name;if(entry.kind==="file"){try{const file=await entry.getFile();if(file.size<2000000)next[p]=await file.text()}catch{}}else await walk(entry,p)}}await walk(root);setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}catch(e){if(e.name!=="AbortError")setLocalStatus("Gagal: "+e.message)}}
  async function importSelectedFiles(e){const next={};for(const file of [...e.target.files])if(file.size<2000000)next[file.webkitRelativePath||file.name]=await file.text();setFiles(f=>({...f,...next}));if(Object.keys(next)[0])setActive(Object.keys(next)[0]);setSaved(false);setLocalStatus("Folder dimuat: "+Object.keys(next).length+" file")}
  function extractFileProposals(message){
@@ -306,10 +366,10 @@ export default function App(){
  }
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
-  const requestPath=active; const requestCode=files[active]??""; const wantsReport=/\b(laporan|report|laporkan|buatkan laporan|ringkasan laporan)\b/i.test(prompt); const wantsMultiFile=/\b(semua file|seluruh file|banyak file|multi.?file|semua berkas|seluruh proyek|seluruh project|perbaiki semuanya|perbaiki semua|ubah semua file|edit semua file|beberapa file|4 file|empat file)\b/i.test(prompt); const wantsCoding=!wantsReport&&(wantsMultiFile||aiMode==="Edit"||/\b(buat|bikin|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt)); const wantsAnalysis=!wantsReport&&!wantsCoding&&(aiMode==="Analisis"||/\b(jelaskan|analisis|cek|review|cari|bug|periksa|apa fungsi)\b/i.test(prompt));
+  const requestPath=active; const wantsReport=/\b(laporan|report|laporkan|buatkan laporan|ringkasan laporan)\b/i.test(prompt); const wantsMultiFile=/\b(semua file|seluruh file|banyak file|multi.?file|semua berkas|seluruh proyek|seluruh project|perbaiki semuanya|perbaiki semua|ubah semua file|edit semua file|beberapa file|4 file|empat file)\b/i.test(prompt); const wantsCoding=!wantsReport&&(wantsMultiFile||aiMode==="Edit"||/\b(buat|bikin|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt)); const wantsAnalysis=!wantsReport&&!wantsCoding&&(aiMode==="Analisis"||/\b(jelaskan|analisis|cek|review|cari|bug|periksa|apa fungsi)\b/i.test(prompt));
   setAi("");setAiBusy(true);setAiStartedAt(Date.now());setAiElapsed(0);
   // Hindari menyisipkan README dan seluruh isi workspace ke setiap pesan.
-  const isReadmePath=p=>/^README(?:\.[^/]+)?$/i.test(String(p).split("/").pop()||"");
+  
   const workspaceIndex=Object.keys(files).filter(p=>!isReadmePath(p)).sort().map(p=>(p===requestPath?"▶ ":"  ")+p).join("\n");
   const includeWorkspaceContext=(wantsCoding||wantsAnalysis)&&!isReadmePath(requestPath);
   const relevantFiles=Object.entries(files).filter(([p])=>!isReadmePath(p)).slice(0,wantsMultiFile?40:wantsCoding?24:5);
@@ -408,12 +468,6 @@ export default function App(){
   if(!commands.length){setTerminalLines(x=>[...x,"MAX AI: Tidak menemukan manifest dependensi (composer.json, package.json, requirements.txt, go.mod, Cargo.toml, Gemfile, pom.xml, atau build.gradle). Impor folder proyek lengkap dahulu."]);return;}
   if(!localSocket.current||localSocket.current.readyState!==WebSocket.OPEN){setTerminalLines(x=>[...x,"MAX AI: Perlu menghubungkan Local Agent di komputer proyek sebelum instalasi.","Perintah yang terdeteksi: "+commands.join(" && "),"Buka Integrasi → Local Agent → Hubungkan, lalu klik Instal Dependensi lagi."]);return;}
   setTerminalLines(x=>[...x,"MAX AI: Mendeteksi paket dari file proyek…","MAX AI: Menjalankan instalasi dependensi: "+commands.join(" && ")]);
-  const runNext=(index)=>{
-   if(index>=commands.length){setTerminalLines(x=>[...x,"MAX AI: Semua perintah instalasi selesai. Periksa kode keluar di atas."]);return;}
-   const command=commands[index];
-   setTerminalLines(x=>[...x,"PS MAX> "+command]);
-   localSocket.current.send(JSON.stringify({type:"exec",command}));
-  };
   // Send a single platform-compatible shell command chain so output remains ordered.
   const command=commands.join(" && ");
   localSocket.current.send(JSON.stringify({type:"exec",command}));
@@ -439,15 +493,12 @@ export default function App(){
     <aside className="sidebar">
       <div className="side-head"><span>PENJELAJAH</span><div><button onClick={importFolder}><FolderInput size={14}/></button><button onClick={createFile}><Plus size={15}/></button></div></div>
       <div className="project"><FolderOpen size={15}/><strong>{workspace?.name||"MAX Workspace"}</strong><ChevronDown size={14}/></div>
-      {Object.keys(files).sort().map(name=><FileItem key={name} name={name} active={active===name} onClick={()=>setActive(name)}/>)}
-      <div className="folder"><Folder size={15}/><span>src</span></div>
-      <FileItem name="App.js" active={active==="src/App.js"} onClick={()=>setActive("src/App.js")}/>
-      <FileItem name="index.js" active={active==="src/index.js"} onClick={()=>setActive("src/index.js")}/>
+      {Object.keys(files).sort().map(name=><FileItem key={name} name={name} active={active===name} onClick={()=>setActive(name)} onRename={()=>renameFile(name)} onDelete={()=>deleteFile(name)}/>)}
       <div className="side-bottom"><div><Cloud size={15}/> Simpan otomatis ke PostgreSQL</div><small>{syncState.status}{syncState.lastSync?" · "+syncState.lastSync:""}</small>{folderInfo?.name&&<small>Folder: {folderInfo.name}</small>}{syncState.error&&<small className="sync-error">{syncState.error}</small>}</div>
     </aside>
     <main className="editor-area">
-      <div className="tabs"><button className="pane-toggle" title={splitView?"Kembali ke satu editor":"Buka empat editor bersamaan"} onClick={()=>{setSplitView(v=>!v);if(!splitView){const list=Object.keys(files).filter(p=>!/^README(?:\.[^/]+)?$/i.test(p.split("/").pop()||"")).sort().slice(0,4);setPaneFiles([list[0]||active,list[1]||"",list[2]||"",list[3]||""]);}}}><Code2 size={14}/>{splitView?"Satu editor":"4 editor"}</button><div className="tab active"><span className="tab-file-icon"><FileIconForTab name={active}/></span>{active.split("/").pop()}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button onClick={()=>setSplitView(v=>!v)} title="Tata letak editor"><Search size={15}/></button></div>
-      {splitView?<div className="multi-editor-grid">{[0,1,2,3].map(slot=>{const path=paneFiles[slot]||"";const ext=(path.split(".").pop()||"").toLowerCase();const langs={js:"javascript",jsx:"javascript",ts:"typescript",tsx:"typescript",html:"html",htm:"html",php:"php",blade:"html",css:"css",scss:"scss",json:"json",md:"markdown",py:"python",sql:"sql",yml:"yaml",yaml:"yaml",xml:"xml",sh:"shell"};return <section className="multi-editor-pane" key={slot}><div className="multi-pane-head"><select aria-label={"Pilih file panel "+(slot+1)} value={path} onChange={e=>setPaneFiles(prev=>prev.map((v,i)=>i===slot?e.target.value:v))}><option value="">Pilih file…</option>{Object.keys(files).filter(p=>!/^README(?:\.[^/]+)?$/i.test(p.split("/").pop()||"")).sort().map(p=><option key={p} value={p}>{p}</option>)}</select><button title="Jadikan file aktif" onClick={()=>{if(path)setActive(path)}}>↗</button></div>{path?<Editor theme="vs-dark" language={langs[ext]||"plaintext"} value={files[path]??""} onChange={value=>{setFiles(prev=>({...prev,[path]:value??""}));setSaved(false);setSyncState(x=>({...x,status:"Perubahan lokal belum diunggah"}));}} options={{fontSize:12,minimap:{enabled:false},automaticLayout:true,padding:{top:8},smoothScrolling:true,scrollBeyondLastLine:false,wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:8,horizontalScrollbarSize:8}}}/>:<div className="multi-pane-empty">Pilih file untuk panel ini</div>}</section>})}</div>:<div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor,monaco)=>{editorRef.current=editor;editorRef.current.monaco=monaco;editor.focus();}} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection",wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:10,horizontalScrollbarSize:10}}}/></div>}
+      <div className="tabs"><button className="pane-toggle" title={splitView?"Kembali ke satu editor":"Buka empat editor bersamaan"} onClick={()=>{setSplitView(v=>!v);if(!splitView){const list=Object.keys(files).filter(p=>!isReadmePath(p)).sort().slice(0,4);setPaneFiles([list[0]||active,list[1]||"",list[2]||"",list[3]||""]);}}}><Code2 size={14}/>{splitView?"Satu editor":"4 editor"}</button><div className="tab active"><span className="tab-file-icon"><FileIconForTab name={active}/></span>{active.split("/").pop()}<span className={saved?"":"dirty"}>{saved?"":"●"}</span></div><div className="tab-spacer"/><button onClick={()=>setSplitView(v=>!v)} title="Tata letak editor"><Search size={15}/></button></div>
+      {splitView?<div className="multi-editor-grid">{[0,1,2,3].map(slot=>{const path=paneFiles[slot]||"";return <section className="multi-editor-pane" key={slot}><div className="multi-pane-head"><select aria-label={"Pilih file panel "+(slot+1)} value={path} onChange={e=>setPaneFiles(prev=>prev.map((v,i)=>i===slot?e.target.value:v))}><option value="">Pilih file…</option>{Object.keys(files).filter(p=>!isReadmePath(p)).sort().map(p=><option key={p} value={p}>{p}</option>)}</select><button title="Jadikan file aktif" onClick={()=>{if(path)setActive(path)}}>↗</button></div>{path?<Editor theme="vs-dark" language={languageForPath(path)} value={files[path]??""} onChange={value=>{setFiles(prev=>({...prev,[path]:value??""}));setSaved(false);setSyncState(x=>({...x,status:"Perubahan lokal belum diunggah"}));}} options={{fontSize:12,minimap:{enabled:false},automaticLayout:true,padding:{top:8},smoothScrolling:true,scrollBeyondLastLine:false,wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:8,horizontalScrollbarSize:8}}}/>:<div className="multi-pane-empty">Pilih file untuk panel ini</div>}</section>})}</div>:<div className="monaco"><Editor theme="vs-dark" language={language} value={code} onChange={updateCode} onMount={(editor,monaco)=>{editorRef.current=editor;editorRef.current.monaco=monaco;editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KeyS,()=>saveAllRef.current?.("manual"));editor.focus();}} options={{fontSize:14,minimap:{enabled:false},automaticLayout:true,padding:{top:14},smoothScrolling:true,scrollBeyondLastLine:false,renderWhitespace:"selection",wordWrap:"on",scrollbar:{vertical:"auto",horizontal:"auto",verticalScrollbarSize:10,horizontalScrollbarSize:10}}}/></div>}
       {terminal&&<section className="bottom-panel"><div className="bottom-tabs"><button className={bottomTab==="Terminal"?"selected":""} onClick={()=>setBottomTab("Terminal")}><Terminal size={13}/> Terminal</button><button className={bottomTab==="Output"?"selected":""} onClick={()=>setBottomTab("Output")}>Output</button><button className={bottomTab==="Problems"?"selected":""} onClick={()=>setBottomTab("Problems")}><AlertTriangle size={13}/> Masalah {problems.length?`(${problems.length})`:""}</button><button className={bottomTab==="Build"?"selected":""} onClick={()=>setBottomTab("Build")}><Play size={13}/> Build</button><span className="bottom-spacer"/><button onClick={()=>setTerminal(false)} title="Tutup panel">×</button></div><div className="bottom-content">{bottomTab==="Build"?<><strong>{buildStatus}</strong><p>Build dijalankan melalui Local Agent pada folder proyek lokal.</p><button className="build-button" onClick={runBuild}><Play size={13}/> Jalankan Build</button><button className="build-button" onClick={autoInstallDependencies}><PlugZap size={13}/> Instal dependensi otomatis</button><p>MAX AI mendeteksi Composer, npm, Python, Go, Rust, Ruby, dan Java dari manifest proyek. Local Agent menjalankan perintah pada folder proyek yang sedang terhubung.</p></>:bottomTab==="Problems"?<div>{problems.length?problems.map((p,i)=><div key={i}>{p}</div>):"Belum ada hasil pemeriksaan kode. Jalankan Build untuk memeriksa proyek."}</div>:bottomTab==="Output"?terminalLines.map((line,i)=><div key={i}>{line}</div>):<><div className="terminal-head"><span><Terminal size={14}/> TERMINAL · {localStatus}</span><button onClick={()=>setTerminal(false)}>×</button></div><div className="terminal-lines">{terminalLines.map((line,i)=><div key={i}>{line}</div>)}</div><div className="terminal-command"><span className="prompt">PS MAX&gt;</span> <input value={terminalInput} onChange={e=>setTerminalInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")runTerminal()}} placeholder="Masukkan perintah..." /></div></>}</div></section>}
       <div className="statusbar"><span className="diff-summary"><i className="diff-added">+{changeStats.added}</i> <i className="diff-removed">−{changeStats.removed}</i></span><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
     </main>
@@ -479,7 +530,7 @@ export default function App(){
      <div className="router-status-box">{routerStatus||"Pilihan disimpan dan digunakan untuk permintaan MAX AI berikutnya."}</div>
      <div><button onClick={testRouter} disabled={routerStats.loading}><RefreshCw size={13}/> Sinkronkan model & combo</button><button className="primary" onClick={saveRouterLocal}>Simpan pilihan</button></div>
    </div></div>}
-   {documentsOpen&&<DocumentsPanel files={files} active={active} code={code} onClose={()=>setDocumentsOpen(false)} onCreate={(path,content)=>{setFiles(f=>({...f,[path]:content}));setOriginalFiles(f=>({...f,[path]:content}));setActive(path);setSaved(false);setSyncState(x=>({...x,status:"File dokumen baru dibuat"}));}}/>}
+   {documentsOpen&&<Suspense fallback={null}><DocumentsPanel files={files} active={active} code={code} onClose={()=>setDocumentsOpen(false)} onCreate={(path,content)=>{if(!isValidFilePath(path)){setCodeApplyStatus("Nama file tidak valid: "+path);return}setFiles(f=>({...f,[path]:content}));setOriginalFiles(f=>({...f,[path]:content}));setActive(path);setSaved(false);setSyncState(x=>({...x,status:"File dokumen baru dibuat"}));}}/></Suspense>}
    {integrationsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setIntegrationsOpen(false)}}><div className="router-modal">
      <div className="router-modal-head"><strong>Integrasi Pengembang</strong><button onClick={()=>setIntegrationsOpen(false)}><X size={18}/></button></div>
      <div className="integration-row"><Github size={18}/><div><strong>GitHub</strong><small>Gunakan terminal lokal untuk mengambil, menarik, melakukan commit, dan mengirim perubahan tanpa menyimpan token di browser.</small></div></div>

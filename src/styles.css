@@ -300,3 +300,14 @@ button,.file-item,.suggestions button,.bottom-tabs button,.tab,.project,.folder{
 .updates-panel,.router-modal,.model-detail-modal{transform-origin:top right}
 button:focus-visible,.file-item:focus-visible,.tab:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+/* File rows: rename / delete actions + folder hint */
+.file-row{display:flex;align-items:center;position:relative;min-width:0}
+.file-row>.file-item{flex:1 1 auto;min-width:0}
+.file-row .file-dir{margin-left:8px;color:#6b7686;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
+.file-actions{display:none;gap:2px;padding-right:6px;flex:0 0 auto}
+.file-row:hover .file-actions,.file-row:focus-within .file-actions{display:flex}
+.file-actions button{width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:5px;background:transparent;color:#8b95a5;cursor:pointer}
+.file-actions button:hover{background:rgba(255,255,255,.08);color:#f0f3f7}
+.file-actions button:last-child:hover{color:#ff6b6b}
+@media(hover:none){.file-actions{display:flex}}
