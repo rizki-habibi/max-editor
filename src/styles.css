@@ -329,3 +329,19 @@ button:focus-visible,.file-item:focus-visible,.tab:focus-visible{outline:2px sol
 .palette-empty{padding:18px;color:#8b95a5;text-align:center;font-size:13px}
 .palette-foot{display:flex;gap:16px;padding:8px 12px;border-top:1px solid #2a3140;color:#6b7686;font-size:11.5px}
 .palette-foot kbd{margin:0 3px 0 0}
+
+
+/* Sidebar drawer transitions: animated desktop collapse and mobile slide-in panels. */
+.sidebar,.ai-panel{overflow:hidden;transition:width .22s ease,flex-basis .22s ease,opacity .18s ease,transform .22s ease}
+.workspace.left-panel-open .sidebar{opacity:1;transform:translateX(0)}
+.workspace.left-panel-closed .sidebar{display:flex!important;flex:0 0 0!important;width:0!important;min-width:0!important;opacity:0;transform:translateX(-12px);border-right:0!important;pointer-events:none}
+.workspace.right-panel-open .ai-panel{display:flex;opacity:1;transform:translateX(0)}
+.workspace.right-panel-closed .ai-panel{display:flex!important;flex:0 0 0!important;width:0!important;min-width:0!important;opacity:0;transform:translateX(12px);border-left:0!important;pointer-events:none}
+@media(max-width:900px){.workspace.right-panel-closed .ai-panel{display:flex!important}}
+@media(max-width:520px){
+ .workspace.left-panel-open .sidebar{position:fixed;z-index:70;left:0;top:46px;bottom:24px;width:min(78vw,260px)!important;flex:0 0 auto!important;box-shadow:18px 0 45px rgba(0,0,0,.35);opacity:1;transform:translateX(0);pointer-events:auto}
+ .workspace.left-panel-closed .sidebar{position:fixed!important;z-index:70;left:0;top:46px;bottom:24px;width:min(78vw,260px)!important;flex:0 0 auto!important;opacity:1;transform:translateX(-105%);border-right:1px solid #20242b!important;pointer-events:none}
+ .workspace.right-panel-open .ai-panel{position:fixed;z-index:80;right:0;top:46px;bottom:24px;width:min(100vw,360px)!important;min-width:0;flex:0 0 auto!important;box-shadow:-18px 0 45px rgba(0,0,0,.4);opacity:1;transform:translateX(0);pointer-events:auto}
+ .workspace.right-panel-closed .ai-panel{position:fixed!important;z-index:80;right:0;top:46px;bottom:24px;width:min(100vw,360px)!important;min-width:0;flex:0 0 auto!important;opacity:1;transform:translateX(105%);border-left:1px solid #20242b!important;pointer-events:none}
+}
+@media(prefers-reduced-motion:reduce){.sidebar,.ai-panel{transition:none!important}}
