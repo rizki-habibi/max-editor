@@ -117,6 +117,7 @@ export default function App(){
  const [terminal,setTerminal]=useState(false); const [bottomTab,setBottomTab]=useState("Terminal"); const [buildStatus,setBuildStatus]=useState("Belum dijalankan"); const [problems]=useState([]);
  const [saved,setSaved]=useState(true);
  const [aiMessages,setAiMessages]=useState([]),[aiBusy,setAiBusy]=useState(false),[routerConfig,setRouterConfig]=useState(()=>getRouterConfig()),[routerOpen,setRouterOpen]=useState(false),[routerStatus,setRouterStatus]=useState("");
+ const [aiProvider,setAiProvider]=useState("router"),[claudeConversationId,setClaudeConversationId]=useState(null),[claudeConversations,setClaudeConversations]=useState([]);
  const [localStatus,setLocalStatus]=useState("Local Agent belum terhubung"),[integrationsOpen,setIntegrationsOpen]=useState(false),[terminalInput,setTerminalInput]=useState(""),[terminalLines,setTerminalLines]=useState([]);
  const [routerStats,setRouterStats]=useState({total:0,free:0,paid:0,unknown:0,syncedAt:null,loading:false,error:""});
  const [routerModels,setRouterModels]=useState([]); const [routerCombos,setRouterCombos]=useState([]); const [comboError,setComboError]=useState(""); const [modelDetail,setModelDetail]=useState(null); const [aiStartedAt,setAiStartedAt]=useState(null); const [aiElapsed,setAiElapsed]=useState(0); const [typingCode,setTypingCode]=useState(false); const [codeApplyStatus,setCodeApplyStatus]=useState(""); const typingTimer=useRef(null);
@@ -370,6 +371,25 @@ export default function App(){
    if(index>=target.length){clearInterval(typingTimer.current);typingTimer.current=null;setTypingCode(false);setSaved(false);setCodeApplyStatus("Kode diterapkan ke "+targetPath+". Menyimpan otomatis…");setTimeout(()=>setCodeApplyStatus(""),4500);}
   },12);
  }
+ async function loadClaudeConversation(id){
+  try{
+   const response=await fetch("/api/claude/conversations/"+encodeURIComponent(id),{credentials:"same-origin",cache:"no-store"});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(data.error||"Gagal memuat riwayat Claude.");
+   setClaudeConversationId(id);
+   setAiProvider("claude");
+   setAiMessages((data.messages||[]).map(item=>({role:item.role==="assistant"?"assistant":"user",content:item.content})));
+  }catch(error){notifyUpdate("error","Riwayat Claude gagal dimuat",error.message);}
+ }
+ async function refreshClaudeConversations(){
+  try{
+   const response=await fetch("/api/claude/conversations",{credentials:"same-origin",cache:"no-store"});
+   if(!response.ok)return;
+   const data=await response.json();
+   setClaudeConversations(Array.isArray(data.conversations)?data.conversations:[]);
+  }catch{}
+ }
+ useEffect(()=>{if(session)refreshClaudeConversations();else{setClaudeConversations([]);setClaudeConversationId(null)}},[session]);
  async function sendAi(){
   const prompt=ai.trim();if(!prompt||aiBusy)return;
   const requestPath=active; const wantsReport=/\b(laporan|report|laporkan|buatkan laporan|ringkasan laporan)\b/i.test(prompt); const wantsMultiFile=/\b(semua file|seluruh file|banyak file|multi.?file|semua berkas|seluruh proyek|seluruh project|perbaiki semuanya|perbaiki semua|ubah semua file|edit semua file|beberapa file|4 file|empat file)\b/i.test(prompt); const wantsCoding=!wantsReport&&(wantsMultiFile||aiMode==="Edit"||/\b(buat|bikin|tambah|tambahkan|perbaiki|ubah|edit|implement|implementasikan|coding|ngoding|refactor|fix|write|create|build|generate|buatkan|perbarui|optimalkan)\b/i.test(prompt)); const wantsAnalysis=!wantsReport&&!wantsCoding&&(aiMode==="Analisis"||/\b(jelaskan|analisis|cek|review|cari|bug|periksa|apa fungsi)\b/i.test(prompt));
@@ -389,6 +409,22 @@ export default function App(){
   setAiMessages(displayMsgs);
   try{
    let result,activeModel=routerConfig.model,lastError,streamedText="";
+   if(aiProvider==="claude"){
+    const response=await fetch("/api/claude/chat",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({conversationId:claudeConversationId,message:prompt+fileContext+multiFileInstructions+modeInstructions+codingInstructions})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||"Permintaan Claude gagal ("+response.status+").");
+    result=String(data.reply||"");
+    setClaudeConversationId(data.conversationId);
+    await refreshClaudeConversations();
+    setAiMessages([...displayMsgs,{role:"assistant",content:result}]);
+    if(wantsCoding&&autopilot){
+     const multi=extractFileProposals(result),proposal=extractCodeBlock(result);
+     if(multi.length)applyCodeProposal(result,requestPath);
+     else if(!wantsMultiFile&&proposal!==null)applyCodeProposal(result,requestPath);
+     else if(wantsMultiFile)setCodeApplyStatus("Claude belum mengembalikan blok file:path yang dapat diterapkan; tidak ada file yang diubah.");
+    }
+    return;
+   }
    setAiMessages([...displayMsgs,{role:"assistant",content:""}]);
    try{
     result=await chatWithRouter(routerConfig,requestMsgs,piece=>{
@@ -509,10 +545,10 @@ export default function App(){
       <div className="statusbar"><span className="diff-summary"><i className="diff-added">+{changeStats.added}</i> <i className="diff-removed">−{changeStats.removed}</i></span><span>{saved?"Tersimpan":"Belum disimpan"}</span><span>{language}</span><span>UTF-8</span><button onClick={()=>{setTerminal(true);setBottomTab("Terminal")}}><Terminal size={13}/> Terminal</button><button onClick={runBuild}><Play size={13}/> Build</button></div>
     </main>
     <aside className="ai-panel">
-      <div className="ai-head"><div><span className="ai-brand-icon"><Sparkles size={15}/></span><strong>MAX AI</strong></div><div className="ai-head-actions"><button onClick={()=>setRightPanelOpen(false)} title="Tutup panel MAX AI" aria-label="Tutup panel MAX AI"><X size={14}/></button><button onClick={()=>setAiMessages([])} title="Percakapan baru" aria-label="Percakapan baru"><Trash2 size={14}/></button><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?((routerConfig.selectionType==="combo"?"Combo · ":"")+routerConfig.model.split("/").slice(-1)[0]):"Pilih model"} <ChevronDown size={12}/></button></div></div>
+      <div className="ai-head"><div><span className="ai-brand-icon"><Sparkles size={15}/></span><strong>MAX AI</strong></div><div className="ai-head-actions"><button type="button" onClick={()=>{setAiProvider(v=>v==="router"?"claude":"router");setAiMessages([]);setClaudeConversationId(null)}} title="Beralih antara MAX Router dan Claude API" aria-label="Ganti penyedia AI">{aiProvider==="claude"?"Claude":"Router"}</button>{aiProvider==="claude"&&<button type="button" onClick={()=>{setClaudeConversationId(null);setAiMessages([])}} title="Percakapan Claude baru" aria-label="Percakapan Claude baru"><Plus size={13}/></button>}{aiProvider==="claude"&&<select className="ai-history-select" aria-label="Riwayat percakapan Claude" value={claudeConversationId||""} onChange={e=>e.target.value?loadClaudeConversation(e.target.value):(setClaudeConversationId(null),setAiMessages([]))}><option value="">Percakapan baru</option>{claudeConversations.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select>}<button onClick={()=>setRightPanelOpen(false)} title="Tutup panel MAX AI" aria-label="Tutup panel MAX AI"><X size={14}/></button><button onClick={()=>{setAiMessages([]);if(aiProvider==="claude"){setClaudeConversationId(null);}}} title="Percakapan baru" aria-label="Percakapan baru"><Trash2 size={14}/></button><button onClick={()=>setRouterOpen(true)} title="Pilih model AI">{routerConfig.model?((routerConfig.selectionType==="combo"?"Combo · ":"")+routerConfig.model.split("/").slice(-1)[0]):"Pilih model"} <ChevronDown size={12}/></button></div></div>
       <div className="ai-body" ref={aiBodyRef}>{aiBusy&&<div className="ai-working"><span className="ai-spinner"></span><div><strong>MAX AI sedang berpikir…</strong><small>{aiElapsed<10?"Mengirim permintaan dan menunggu model":aiElapsed<35?"Menganalisis konteks kode":aiElapsed<90?"Menyusun respons atau perubahan kode":"Respons lebih lama dari biasanya"} · {Math.floor(aiElapsed/60)}:{String(aiElapsed%60).padStart(2,"0")}</small><div className="ai-progress"><i style={{width:Math.min(96,12+aiElapsed*1.2)+"%"}}/></div></div></div>}{aiMessages.length===0&&!ai.trim()?<div className="ai-empty"><div className="ai-icon"><Sparkles size={23}/></div><h3>Apa yang ingin kamu buat?</h3><p>Tanyakan sesuatu, minta analisis file, atau biarkan MAX AI membantu menulis kode.</p><div className="suggestions"><button onClick={()=>setAi("Jelaskan file ini")}>Jelaskan file ini</button><button onClick={()=>setAi("Cari bug di file ini")}>Cari bug</button><button onClick={()=>requestCodingMode("Perbaiki dan optimalkan file aktif ini")}>Ngoding langsung</button></div></div>:<div className="ai-messages">{aiMessages.map((m,i)=><div key={i} className={"ai-message "+m.role}><span>{m.role==="user"?"Kamu":"MAX AI"}</span><div>{m.content}{aiBusy&&i===aiMessages.length-1&&m.role==="assistant"&&<span className="live-cursor"/>}</div>{m.role==="assistant"&&(extractCodeBlock(m.content)!==null||extractFileProposals(m.content).length>0)&&<button className="apply-code-button" disabled={typingCode} onClick={()=>applyCodeProposal(m.content)}>{typingCode?"AI sedang mengetik…":"Terapkan kode ke editor"}</button>}</div>)}</div>}</div>
       {codeApplyStatus&&<div className="code-apply-status"><span className={typingCode?"typing-cursor":""}></span>{codeApplyStatus}</div>}<div className="ai-composer"><div className="ai-input"><textarea value={ai} onChange={e=>setAi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAi()}}} placeholder="Tanyakan atau jelaskan apa yang ingin dibuat…"/><div className="ai-composer-actions"><button className="ai-send" onClick={sendAi} disabled={aiBusy||!ai.trim()} title="Kirim pesan" aria-label="Kirim pesan"><Send size={15}/></button></div><div className="ai-composer-toolbar"><button type="button" title="Tambahkan instruksi atau konteks" onClick={()=>setComposerMenu(v=>!v)}><Hash size={15}/></button><button type="button" title="Sertakan file aktif sebagai konteks" onClick={()=>setAi(value=>(value?value+"\n\n":"")+"Gunakan file aktif `"+active+"` sebagai konteks utama.")}><Paperclip size={15}/></button><span className="toolbar-separator"/><label className="mini-select"><CircleDot size={13}/><select aria-label="Mode AI" value={aiMode} onChange={e=>setAiMode(e.target.value)}><option>Auto</option><option>Tanya</option><option>Edit</option><option>Analisis</option></select><ChevronDown size={11}/></label><span className="toolbar-spacer"/><label className="mini-select"><SlidersHorizontal size={13}/><select aria-label="Profil respons" value={aiProfile} onChange={e=>setAiProfile(e.target.value)}><option>Default</option><option>Cepat</option><option>Teliti</option><option>Kreatif</option></select><ChevronDown size={11}/></label><button type="button" className={"autopilot-toggle "+(autopilot?"enabled":"")} role="switch" aria-checked={autopilot} onClick={()=>setAutopilot(v=>!v)} title="Aktifkan atau matikan autopilot"><span>Autopilot</span><i/></button></div></div>{composerMenu&&<div className="composer-menu"><button onClick={()=>{setAi(value=>(value?value+"\n":"")+"Periksa file aktif "+active+" dan jelaskan bagian yang penting.");setComposerMenu(false)}}><AtSign size={13}/> Konteks file aktif</button><button onClick={()=>{setAiMode("Edit");setAi(value=>(value?value+"\n":"")+"Terapkan perubahan langsung pada semua file yang relevan.");setComposerMenu(false)}}><SquarePen size={13}/> Mode edit multi-file</button><button onClick={()=>{setAiMode("Analisis");setAi(value=>(value?value+"\n":"")+"Analisis struktur proyek dan cari masalah tanpa mengubah kode dulu.");setComposerMenu(false)}}><Search size={13}/> Analisis proyek</button></div>}<div className="ai-composer-hint">Enter untuk mengirim · Shift + Enter untuk baris baru</div></div>
-      <div className="provider">MAX Router · {routerConfig.selectionType==="combo"?"Combo":"Individu"} · {routerConfig.model||"Pilih model"}</div>
+      <div className="provider">{aiProvider==="claude"?"Claude API resmi · riwayat disimpan di PostgreSQL":"MAX Router · "+(routerConfig.selectionType==="combo"?"Combo":"Individu")+" · "+(routerConfig.model||"Pilih model")}</div>
     </aside>
    </div>
    {updateNotice&&<div className={"update-notice "+updateNotice.kind} role="status" aria-live="polite"><div className="update-notice-icon">{updateNotice.kind==="error"?<AlertTriangle size={18}/>:updateNotice.kind==="pending"?<RefreshCw size={18}/>:<CheckCircle2 size={18}/>}</div><div className="update-notice-copy"><strong>{updateNotice.title}</strong><span>{updateNotice.message}</span>{updateNotice.kind==="error"&&<a href="https://github.com/rizki-habibi/max-editor/actions" target="_blank" rel="noreferrer">Lihat log pemeriksaan <GitBranch size={12}/></a>}</div><button type="button" aria-label="Tutup notifikasi" onClick={()=>setUpdateNotice(null)}><X size={15}/></button></div>}
