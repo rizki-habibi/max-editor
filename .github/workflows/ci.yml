@@ -16,7 +16,7 @@ jobs:
         run: node --version && npm --version
       - name: Install dependencies
         run: npm install
-      - name: Production build
+      - name: Unit tests
         run: npm test
-      - name: Build
+      - name: Production build
         run: npm run build
