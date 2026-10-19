@@ -345,3 +345,6 @@ button:focus-visible,.file-item:focus-visible,.tab:focus-visible{outline:2px sol
  .workspace.right-panel-closed .ai-panel{position:fixed!important;z-index:80;right:0;top:46px;bottom:24px;width:min(100vw,360px)!important;min-width:0;flex:0 0 auto!important;opacity:1;transform:translateX(105%);border-left:1px solid #20242b!important;pointer-events:none}
 }
 @media(prefers-reduced-motion:reduce){.sidebar,.ai-panel{transition:none!important}}
+
+.ai-history-select{max-width:118px;min-width:70px;height:25px;padding:3px 5px;border:1px solid #34303b;border-radius:6px;background:#17171d;color:#d8d5df;font-size:10px;outline:none}
+.ai-history-select:focus{border-color:#84627e}
