@@ -42,3 +42,14 @@ registerCommandProvider((ctx) => [
 Perintah dengan `enabled: false` atau `id` ganda otomatis dibuang, dan provider yang melempar error tidak merusak palet.
 
 Jalankan tes: `npm test`.
+
+
+## Claude API resmi (opsional)
+
+MAX Editor dapat menggunakan Claude melalui Anthropic Messages API dari server. Kunci API tidak dikirim ke browser.
+
+Atur variabel environment pada layanan server (misalnya Railway):
+- `ANTHROPIC_API_KEY`: API key Anthropic aktif (jangan commit ke Git).
+- `ANTHROPIC_MODEL`: model Anthropic yang tersedia pada akun, default `claude-sonnet-4-20250514`.
+
+Riwayat Claude disimpan di PostgreSQL pada tabel `claude_conversations` dan `claude_messages`, dibatasi oleh ID pengguna sesi MAX Editor. Tabel dibuat otomatis saat server mulai. Fitur Claude tidak akan bekerja sampai `ANTHROPIC_API_KEY` dikonfigurasi.

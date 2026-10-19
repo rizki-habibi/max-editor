@@ -126,6 +126,10 @@ async function init() {
   await pool.query("CREATE TABLE IF NOT EXISTS editor_workspaces (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT 'MAX Workspace', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query("CREATE TABLE IF NOT EXISTS editor_files (id BIGSERIAL PRIMARY KEY, workspace_id UUID NOT NULL REFERENCES editor_workspaces(id) ON DELETE CASCADE, path TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', language TEXT NOT NULL DEFAULT 'javascript', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(workspace_id,path))");
   await pool.query("CREATE INDEX IF NOT EXISTS editor_workspaces_owner_idx ON editor_workspaces(owner_id)");
+  await pool.query("CREATE TABLE IF NOT EXISTS claude_conversations (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT 'Percakapan baru', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+  await pool.query("CREATE TABLE IF NOT EXISTS claude_messages (id BIGSERIAL PRIMARY KEY, conversation_id UUID NOT NULL REFERENCES claude_conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK (role IN ('user','assistant')), content TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+  await pool.query("CREATE INDEX IF NOT EXISTS claude_conversations_owner_updated_idx ON claude_conversations(owner_id, updated_at DESC)");
+  await pool.query("CREATE INDEX IF NOT EXISTS claude_messages_conversation_idx ON claude_messages(conversation_id, id)");
 }
 // Run fn inside a transaction on ONE dedicated connection. (Issuing BEGIN/COMMIT
 // through pool.query() may hit different connections and silently not be a transaction.)
@@ -144,6 +148,71 @@ async function withTransaction(fn) {
 app.get("/api/health", async (_req, res) => {
   try { await pool.query("SELECT 1"); res.json({ ok: true, service: "MAX Editor", database: "postgres" }); }
   catch (e) { res.status(503).json({ ok: false, database: "error", detail: e.message }); }
+});
+
+// ---------------------------------------------------------------- Claude API (official Anthropic Messages API; API key stays server-side)
+app.get("/api/claude/conversations", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, title, created_at, updated_at FROM claude_conversations WHERE owner_id=$1 ORDER BY updated_at DESC LIMIT 50",
+      [userId(req)],
+    );
+    res.json({ conversations: result.rows });
+  } catch (e) { res.status(500).json({ error: "Gagal memuat riwayat Claude." }); }
+});
+app.get("/api/claude/conversations/:id", requireAuth, async (req, res) => {
+  try {
+    const owner = userId(req);
+    const conversation = await pool.query("SELECT id FROM claude_conversations WHERE id=$1 AND owner_id=$2", [req.params.id, owner]);
+    if (!conversation.rowCount) return res.status(404).json({ error: "Percakapan tidak ditemukan." });
+    const result = await pool.query("SELECT role, content, created_at FROM claude_messages WHERE conversation_id=$1 ORDER BY id", [req.params.id]);
+    res.json({ messages: result.rows });
+  } catch (e) { res.status(400).json({ error: "ID percakapan tidak valid atau riwayat gagal dimuat." }); }
+});
+app.post("/api/claude/chat", requireAuth, async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY || "";
+  if (!apiKey) return res.status(503).json({ error: "Claude belum dikonfigurasi. Tambahkan ANTHROPIC_API_KEY pada environment server MAX Editor." });
+  const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  if (!message || message.length > 25000) return res.status(400).json({ error: "Pesan wajib diisi dan maksimal 25.000 karakter." });
+  const owner = userId(req);
+  try {
+    let conversationId = req.body?.conversationId || null;
+    let conversation;
+    if (conversationId) {
+      conversation = await pool.query("SELECT id, title FROM claude_conversations WHERE id=$1 AND owner_id=$2", [conversationId, owner]);
+      if (!conversation.rowCount) return res.status(404).json({ error: "Percakapan tidak ditemukan." });
+    } else {
+      conversation = await pool.query(
+        "INSERT INTO claude_conversations(owner_id,title) VALUES($1,$2) RETURNING id,title",
+        [owner, message.replace(/\s+/g, " ").slice(0, 72) || "Percakapan baru"],
+      );
+      conversationId = conversation.rows[0].id;
+    }
+    await pool.query("INSERT INTO claude_messages(conversation_id,role,content) VALUES($1,'user',$2)", [conversationId, message]);
+    const history = await pool.query(
+      "SELECT role,content FROM (SELECT id,role,content FROM claude_messages WHERE conversation_id=$1 ORDER BY id DESC LIMIT 40) recent ORDER BY id",
+      [conversationId],
+    );
+    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514", max_tokens: 4096, messages: history.rows.map(row => ({ role: row.role, content: row.content })) }),
+      signal: AbortSignal.timeout(90000),
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      const status = upstream.status === 429 ? 429 : 502;
+      return res.status(status).json({ error: data?.error?.message || "Layanan Claude gagal merespons. Periksa API key, model, dan kuota." });
+    }
+    const reply = Array.isArray(data.content) ? data.content.filter(item => item.type === "text").map(item => item.text || "").join("\n") : "";
+    if (!reply) return res.status(502).json({ error: "Claude tidak mengembalikan teks jawaban." });
+    await pool.query("INSERT INTO claude_messages(conversation_id,role,content) VALUES($1,'assistant',$2)", [conversationId, reply]);
+    await pool.query("UPDATE claude_conversations SET updated_at=NOW() WHERE id=$1", [conversationId]);
+    res.json({ conversationId, reply });
+  } catch (e) {
+    const timedOut = e?.name === "TimeoutError" || e?.name === "AbortError";
+    res.status(timedOut ? 504 : 502).json({ error: timedOut ? "Permintaan Claude melewati batas waktu 90 detik." : "Gagal memproses percakapan Claude." });
+  }
 });
 
 // ---------------------------------------------------------------- MAX Router proxy
