@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "check": "npm run build && node --check server.js && node --check local-agent/server.js"
+    "test": "node --test",
+    "check": "npm test && npm run build && node --check server.js && node --check local-agent/server.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

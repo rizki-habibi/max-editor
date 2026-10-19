@@ -311,3 +311,21 @@ button:focus-visible,.file-item:focus-visible,.tab:focus-visible{outline:2px sol
 .file-actions button:hover{background:rgba(255,255,255,.08);color:#f0f3f7}
 .file-actions button:last-child:hover{color:#ff6b6b}
 @media(hover:none){.file-actions{display:flex}}
+
+/* Command palette (Ctrl/Cmd+K) */
+.palette-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(5,8,14,.55);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh}
+.palette{width:min(620px,92vw);max-height:68vh;display:flex;flex-direction:column;background:#161b24;border:1px solid #2a3140;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
+.palette-input{width:100%;box-sizing:border-box;padding:14px 16px;border:0;border-bottom:1px solid #2a3140;background:transparent;color:#eef2f8;font-size:15px;outline:none}
+.palette-list{overflow-y:auto;padding:6px}
+.palette-group{padding:8px 10px 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7686}
+.palette-item{display:flex;align-items:baseline;gap:8px;padding:8px 10px;border-radius:7px;color:#d5dbe6;cursor:pointer;font-size:13.5px}
+.palette-item.selected{background:#243049;color:#fff}
+.palette-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.palette-title mark{background:none;color:#7cc4ff;font-weight:700}
+.palette-sub{color:#6b7686;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.palette-group-tag{margin-left:auto;color:#6b7686;font-size:11px}
+.palette-item kbd,.palette-foot kbd{margin-left:auto;padding:1px 6px;border:1px solid #2f3a4f;border-radius:4px;background:#10141c;color:#9aa6b8;font:11px/16px ui-monospace,monospace}
+.palette-group-tag+kbd{margin-left:6px}
+.palette-empty{padding:18px;color:#8b95a5;text-align:center;font-size:13px}
+.palette-foot{display:flex;gap:16px;padding:8px 12px;border-top:1px solid #2a3140;color:#6b7686;font-size:11.5px}
+.palette-foot kbd{margin:0 3px 0 0}
