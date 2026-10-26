@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "MAX Browser - AI Web Agent",
+  "version": "0.1.0",
+  "description": "AI agent di side panel yang bisa membaca dan mengoperasikan halaman web. Terhubung ke endpoint OpenAI-compatible seperti MAX Router.",
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Buka MAX Browser"
+  }
+}

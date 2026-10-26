@@ -109,3 +109,16 @@ registerCommandProvider((ctx) =>
     };
   }),
 );
+
+// ---------------------------------------------------------------- MAX Browser extension
+// AI web agent (bergaya Nanobrowser) yang mengendalikan browser asli lewat side panel Chrome.
+// Sumber ada di folder browser-extension/ pada repo ini.
+registerCommandProvider(() => [
+  {
+    id: "open:max-browser",
+    group: "Buka",
+    title: "MAX Browser — AI web agent (extension Chrome)",
+    keywords: "browser extension agent chrome nanobrowser ai",
+    run: () => window.open("https://github.com/rizki-habibi/max-editor/tree/main/browser-extension", "_blank"),
+  },
+]);

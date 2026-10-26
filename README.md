@@ -21,6 +21,18 @@ Online AI coding workspace untuk ekosistem MAX Router.
 6. AI agent dengan diff/approval
 7. Real-time collaboration
 
+## MAX Browser (extension Chrome)
+
+AI web agent bergaya Nanobrowser: baca halaman, klik, ketik, scroll, dan navigasi
+lewat side panel Chrome — terhubung ke API OpenAI-compatible MAX Router.
+
+- Sumber: folder `browser-extension/` (Manifest V3, tanpa build step — langsung load unpacked dari `chrome://extensions`)
+- Kalau kolom **Model** dikosongkan, extension otomatis memakai model `working` terbaik dari `GET /api/agent/config` MAX Router
+- Aksi sensitif (kirim/bayar/hapus/upload) selalu minta konfirmasi Izinkan/Tolak
+- Bisa juga dibuka lewat palet perintah: **MAX Browser — AI web agent**
+
+Panduan install & konfigurasi: `browser-extension/README.md`.
+
 ## Palet perintah (Ctrl/Cmd+K)
 
 Tekan **Ctrl+K** (atau tombol ⌘ di bilah atas) untuk membuka file dengan pencarian fuzzy dan menjalankan aksi

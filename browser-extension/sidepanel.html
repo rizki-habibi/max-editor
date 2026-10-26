@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>MAX Browser</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; display: flex; flex-direction: column;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: #101014; color: #e6e6ea; font-size: 13px;
+  }
+  header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #232329; }
+  .logo { width: 10px; height: 10px; border-radius: 50%; background: #7c5cff; box-shadow: 0 0 8px #7c5cff; }
+  h1 { font-size: 14px; margin: 0; flex: 1; font-weight: 600; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1e1e24; color: #9a9aa5; border: 1px solid #2a2a33; }
+  .badge.running { color: #ffd166; border-color: #5c4a1e; }
+  #settings { padding: 8px 12px; border-bottom: 1px solid #232329; }
+  details summary { cursor: pointer; color: #9a9aa5; font-size: 12px; }
+  .field { margin-top: 8px; }
+  .field label { display: block; font-size: 11px; color: #9a9aa5; margin-bottom: 3px; }
+  .field input {
+    width: 100%; padding: 6px 8px; background: #1a1a20; border: 1px solid #2a2a33;
+    border-radius: 6px; color: #e6e6ea; font-size: 12px;
+  }
+  .check { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: #c9c9d1; }
+  button {
+    cursor: pointer; border: 1px solid #2a2a33; background: #1a1a20; color: #e6e6ea;
+    border-radius: 6px; padding: 6px 10px; font-size: 12px;
+  }
+  button:hover { background: #24242c; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #saveBtn { margin-top: 8px; }
+  #hint { font-size: 11px; color: #71717c; margin-top: 6px; }
+  main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .msg {
+    padding: 8px 10px; border-radius: 8px; background: #17171d; border: 1px solid #232329;
+    font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { background: #1d1a2e; border-color: #3a2f66; }
+  .msg.assistant { background: #131a14; border-color: #274a2b; }
+  .msg.thought { color: #9a9aa5; font-size: 11px; }
+  .msg.step { color: #71717c; font-size: 11px; background: none; border: none; padding: 0 2px; }
+  .msg.action { background: #1a1622; border-color: #3a2f66; }
+  .msg.observation { color: #9a9aa5; font-size: 11px; }
+  .msg.confirm.approve { border-color: #274a2b; }
+  .msg.confirm.deny { border-color: #4a272b; }
+  .msg.confirm .btns { display: flex; gap: 6px; margin-top: 6px; }
+  #inputBar { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid #232329; }
+  #task {
+    flex: 1; resize: none; height: 46px; padding: 6px 8px; background: #1a1a20;
+    border: 1px solid #2a2a33; border-radius: 6px; color: #e6e6ea; font-size: 12px; font-family: inherit;
+  }
+  #inputBar > div { display: flex; flex-direction: column; gap: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"></div>
+  <h1>MAX Browser</h1>
+  <span id="badge" class="badge">Siaga</span>
+</header>
+<main>
+  <div id="settings">
+    <details>
+      <summary>Pengaturan</summary>
+      <div class="field">
+        <label for="baseUrl">API Base URL (MAX Router)</label>
+        <input type="text" id="baseUrl" placeholder="http://localhost:3001 atau URL Railway">
+      </div>
+      <div class="field">
+        <label for="apiKey">API Key</label>
+        <input type="password" id="apiKey" placeholder="Buat di dashboard MAX Router">
+      </div>
+      <div class="field">
+        <label for="model">Model (kosong = otomatis terbaik)</label>
+        <input type="text" id="model" placeholder="kosongkan untuk otomatis dari MAX Router">
+      </div>
+      <div class="field">
+        <label for="maxSteps">Maks. langkah</label>
+        <input type="number" id="maxSteps" min="1" max="50">
+      </div>
+      <div class="check">
+        <input type="checkbox" id="confirmSensitive">
+        <label for="confirmSensitive">Konfirmasi aksi sensitif (kirim/bayar/hapus)</label>
+      </div>
+      <button id="saveBtn">Simpan</button>
+      <div id="hint">API key hanya disimpan lokal di browser (chrome.storage.local).</div>
+    </details>
+  </div>
+  <div id="log"></div>
+</main>
+<div id="inputBar">
+  <textarea id="task" placeholder="Contoh: cari berita AI di halaman ini, lalu ringkas dalam 3 poin"></textarea>
+  <div>
+    <button id="runBtn">Jalankan</button>
+    <button id="stopBtn">Stop</button>
+  </div>
+</div>
+<script src="sidepanel.js"></script>
+</body>
+</html>
